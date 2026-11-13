@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.math.BigDecimal;
+import java.math.MathContext;
 import java.time.LocalDate;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -53,6 +54,8 @@ class PriceAmortizationTest {
             "123456.78, 0.021,   120",
             "100.00,    0.0001,  420",
             "999.99,    0,       7",
+            // Long term: the remainder grows with (1 + i)^n and the last line is far above PMT.
+            "10000.00,  0.0185,  420",
     })
     void scheduleInvariantsHold(String principal, String rate, int term) {
         BigDecimal p = new BigDecimal(principal);
@@ -73,8 +76,46 @@ class PriceAmortizationTest {
             assertThat(line.remainingBalance().signum()).isNotNegative();
         });
         assertThat(schedule.subList(0, term - 1)).allSatisfy(line -> assertThat(line.amount()).isEqualByComparingTo(pmt));
+        // Each of the n - 1 regular lines carries at most half a cent of PMT rounding and half a
+        // cent of interest rounding, and that error then earns interest until the end:
+        // |last - PMT| <= 0.01 * ((1 + i)^(n - 1) - 1) / i, or 0.01 * (n - 1) when i = 0.
         BigDecimal lastDiff = schedule.getLast().amount().subtract(pmt).abs();
-        assertThat(lastDiff).as("remainder stays small").isLessThanOrEqualTo(new BigDecimal("0.01").multiply(BigDecimal.valueOf(term)));
+        assertThat(lastDiff).as("remainder is inside the analytic bound")
+                .isLessThanOrEqualTo(new BigDecimal("0.01").multiply(accumulation(i, term - 1)));
+        assertThat(PriceAmortization.largestInstallment(schedule)).isEqualByComparingTo(pmt.max(schedule.getLast().amount()));
+    }
+
+    @Test
+    void largestInstallmentIsTheLastOneWhenItAbsorbsAPositiveRemainder() {
+        // The README example: PMT 353.24, last line 354.04. A margin check against PMT alone
+        // would accept a customer whose margin cannot pay the last installment.
+        List<ScheduledInstallment> schedule =
+                PriceAmortization.schedule(new BigDecimal("15000.00"), new BigDecimal("0.0185"), 84, FIRST_DUE);
+
+        assertThat(schedule.getFirst().amount()).isEqualByComparingTo("353.24");
+        assertThat(PriceAmortization.largestInstallment(schedule)).isEqualByComparingTo("354.04");
+    }
+
+    @ParameterizedTest(name = "P={0}, i={1}, n={2} pays off before the last month")
+    @CsvSource({
+            // 100 / 420 = 0.238 rounds to 0.24; 417 * 0.24 > 100, so the balance turns negative.
+            "100.00,  0,    420",
+            "100.00,  0,    360",
+            "100.00,  0.01, 420",
+            "1000.00, 0.01, 420",
+    })
+    void rejectsATermWhoseRoundedInstallmentPaysTheLoanOffEarly(String principal, String rate, int term) {
+        assertThatThrownBy(() -> PriceAmortization.schedule(new BigDecimal(principal), new BigDecimal(rate), term, FIRST_DUE))
+                .isInstanceOfSatisfying(BusinessRuleViolationException.class,
+                        ex -> assertThat(ex.code()).isEqualTo("term-too-long-for-amount"));
+    }
+
+    /** s(k, i) = ((1 + i)^k - 1) / i, the future value of k payments of 1; k when i = 0. */
+    private static BigDecimal accumulation(BigDecimal i, int k) {
+        if (i.signum() == 0) {
+            return BigDecimal.valueOf(k);
+        }
+        return BigDecimal.ONE.add(i).pow(k).subtract(BigDecimal.ONE).divide(i, MathContext.DECIMAL128);
     }
 
     @Test

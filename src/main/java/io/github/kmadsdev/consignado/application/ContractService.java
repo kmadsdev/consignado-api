@@ -100,7 +100,9 @@ public class ContractService {
         BigDecimal committed = contracts.sumInstallments(customer.getId(), ContractStatus.marginConsuming());
         BigDecimal available = MarginPolicy.availableMargin(
                 customer.getNetMonthlySalary(), agreement.getMaxMarginPercent(), committed);
-        MarginPolicy.requireFits(contract.getInstallmentAmount(), available);
+        var schedule = PriceAmortization.schedule(contract.getPrincipal(), contract.getMonthlyInterestRate(),
+                contract.getTermMonths(), BusinessCalendar.firstDueDate(clock.instant()));
+        MarginPolicy.requireFits(PriceAmortization.largestInstallment(schedule), available);
 
         return transition(contract, ContractStatus.APPROVED, null);
     }

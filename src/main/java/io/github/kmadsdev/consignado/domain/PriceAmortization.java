@@ -19,6 +19,13 @@ import java.util.List;
  * installment absorbs the remainder: it amortizes the whole remaining balance and the
  * schedule always ends at exactly zero.
  *
+ * <p>The remainder is not always a few cents. Every regular line carries up to half a cent
+ * of PMT rounding and half a cent of interest rounding, and that error earns interest until
+ * the end, so {@code |last - PMT| <= 0.01 * ((1 + i)^(n-1) - 1) / i}. Two consequences:
+ * the last installment can be the largest one (margin checks use
+ * {@link #largestInstallment}), and for a small principal over a long term the rounded PMT
+ * can pay the loan off before the last month, which is rejected.
+ *
  * <p>IOF and CET are not computed here. See docs/adr/0002-money-and-rounding.md.
  */
 public final class PriceAmortization {
@@ -56,6 +63,11 @@ public final class PriceAmortization {
             BigDecimal amortization = last ? balance : pmt.subtract(interest);
             BigDecimal amount = last ? interest.add(balance) : pmt;
             balance = balance.subtract(amortization);
+            if (!last && balance.signum() <= 0) {
+                throw new BusinessRuleViolationException("term-too-long-for-amount",
+                        "At this amount and rate, the installment rounded to cents pays the loan off before "
+                                + "the last month. Use a shorter term or a larger amount.");
+            }
             lines.add(new ScheduledInstallment(
                     n, firstDueDate.plusMonths(n - 1L), amount, interest, amortization, balance));
         }
@@ -66,6 +78,14 @@ public final class PriceAmortization {
         return schedule.stream()
                 .map(ScheduledInstallment::amount)
                 .reduce(BigDecimal.ZERO.setScale(Money.SCALE), BigDecimal::add);
+    }
+
+    /**
+     * The installment that the margin must cover. Usually PMT, but the last line is larger
+     * when it absorbs a positive rounding remainder.
+     */
+    public static BigDecimal largestInstallment(List<ScheduledInstallment> schedule) {
+        return schedule.stream().map(ScheduledInstallment::amount).reduce(BigDecimal::max).orElseThrow();
     }
 
     private static void validate(BigDecimal monthlyRate, int termMonths) {

@@ -104,6 +104,45 @@ class ContractLifecycleIT extends ApiTestBase {
     }
 
     @Test
+    void simulationChecksTheMarginAgainstTheLargestInstallmentNotOnlyThePmt() {
+        // 35% of 1009.26 = 353.241, cap 353.24. PMT is 353.24 but the last line is 354.04.
+        UUID customer = createCustomer(createAgreement("35.00", 96, "0.0185"), "1009.26");
+
+        ResponseEntity<JsonNode> response = simulate(customer, "15000.00", 84);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY);
+        assertThat(response.getBody().get("code").asText()).isEqualTo("margin-exceeded");
+        assertThat(decimal(response.getBody().get("availableMargin"))).isEqualByComparingTo("353.24");
+        assertThat(decimal(response.getBody().get("installment"))).isEqualByComparingTo("354.04");
+    }
+
+    @Test
+    void approvalChecksTheMarginAgainstTheLargestInstallmentNotOnlyThePmt() {
+        // Cap 1050.00. B (PMT 353.24, last 354.04) is simulated while the margin is free.
+        // After A (PMT 696.12) is approved, 353.88 is left: PMT fits, the last line does not.
+        UUID customer = createCustomer(createAgreement("35.00", 96, "0.0185"), "3000.00");
+        UUID a = id(propose(id(simulate(customer, "7430.00", 12)), UUID.randomUUID().toString()));
+        UUID b = id(propose(id(simulate(customer, "15000.00", 84)), UUID.randomUUID().toString()));
+        assertThat(action(a, "approve", null, null).getStatusCode()).isEqualTo(HttpStatus.OK);
+
+        ResponseEntity<JsonNode> approval = action(b, "approve", null, null);
+
+        assertThat(approval.getStatusCode()).isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY);
+        assertThat(approval.getBody().get("code").asText()).isEqualTo("margin-exceeded");
+        assertThat(decimal(approval.getBody().get("availableMargin"))).isEqualByComparingTo("353.88");
+    }
+
+    @Test
+    void aTermThatPaysTheLoanOffEarlyIs422() {
+        UUID customer = createCustomer(createAgreement("35.00", 420, "0"), "5000.00");
+
+        ResponseEntity<JsonNode> response = simulate(customer, "100.00", 420);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY);
+        assertThat(response.getBody().get("code").asText()).isEqualTo("term-too-long-for-amount");
+    }
+
+    @Test
     void concurrentApprovalsForTheSameCustomerCannotBothConsumeTheMargin() throws Exception {
         UUID customer = createCustomer(createAgreement("35.00", 96, "0.015"), "3000.00");
         UUID first = id(propose(id(simulate(customer, "6666.00", 12)), UUID.randomUUID().toString()));

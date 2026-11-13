@@ -68,18 +68,19 @@ public class SimulationService {
         BigDecimal committed = contracts.sumInstallments(customerId, ContractStatus.marginConsuming());
         BigDecimal available = MarginPolicy.availableMargin(
                 customer.getNetMonthlySalary(), agreement.getMaxMarginPercent(), committed);
+        Instant now = clock.instant();
         BigDecimal installment = PriceAmortization.installment(amount, agreement.getMonthlyInterestRate(), termMonths);
+        List<ScheduledInstallment> schedule = PriceAmortization.schedule(
+                amount, agreement.getMonthlyInterestRate(), termMonths, BusinessCalendar.firstDueDate(now));
         try {
-            MarginPolicy.requireFits(installment, available);
+            // Not only PMT: the last installment can be larger when it absorbs the rounding remainder.
+            MarginPolicy.requireFits(PriceAmortization.largestInstallment(schedule), available);
         } catch (MarginExceededException e) {
             metrics.simulation("margin_exceeded");
             throw e;
         }
         metrics.simulation("accepted");
 
-        Instant now = clock.instant();
-        List<ScheduledInstallment> schedule = PriceAmortization.schedule(
-                amount, agreement.getMonthlyInterestRate(), termMonths, BusinessCalendar.firstDueDate(now));
         LoanSimulation simulation = simulations.save(new LoanSimulation(
                 customerId, agreement.getId(), amount, agreement.getMonthlyInterestRate(), termMonths, installment,
                 PriceAmortization.totalPayable(schedule), available, now, now.plus(validity)));
