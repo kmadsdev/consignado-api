@@ -30,6 +30,6 @@ Nothing else changes: the use cases only know `OutboxWriter`.
 - The relay holds row locks while it publishes. Batches must stay small (`batch-size`, default 100) and the broker call must have a timeout.
 - `SKIP LOCKED` lets several instances relay at once, but then two instances can take two events of the same contract and publish them out of order. With more than one instance, I would partition the relay by `hash(aggregate_id)` or run it on a single leader.
 - Identity values are assigned at insert time, not at commit time, so across *different* contracts a later position can commit first. Per contract this cannot happen, because changes to one contract are serialized by its version.
-- After `max-attempts` (default 10) a row stops being retried. The `consignado_outbox_pending` gauge shows it; nothing pages anyone yet.
+- After `max-attempts` (default 10) a row stops being retried, and the later events of the same contract wait behind it (the relay query skips them), so a consumer never gets `contract.approved` for a contract it never saw proposed. A person has to repair the row and reset `attempts`. The `consignado_outbox_pending` gauge shows it; nothing pages anyone yet.
 - Published rows are never deleted. A real system needs a cleanup job.
-- `OutboxIT` covers: events in order, a failed publish that holds back the same contract and then recovers, and a rejected approval that writes no event.
+- `OutboxIT` covers: events in order, a failed publish that holds back the same contract and then recovers, a dead event that keeps holding it back, and a rejected approval that writes no event.

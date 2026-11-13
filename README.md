@@ -147,7 +147,7 @@ curl -s -X POST localhost:8080/api/v1/simulations -H 'Content-Type: application/
 }
 ```
 
-The last installment is 0.80 higher than the others because it absorbs the rounding remainder ([ADR 0002](docs/adr/0002-money-and-rounding.md)).
+The last installment is 0.80 higher than the others because it absorbs the rounding remainder, so the margin check uses that largest installment, not only the regular one ([ADR 0002](docs/adr/0002-money-and-rounding.md)).
 
 **4. Contract** with an idempotency key:
 
@@ -191,7 +191,7 @@ Every error is `application/problem+json` (RFC 9457, which replaced RFC 7807) wi
 | 404 | `not-found` |
 | 409 | `illegal-status-transition`, `simulation-already-used`, `customer-already-exists`, `agreement-code-taken`, `concurrent-update`, `data-conflict` |
 | 412 | `version-mismatch` |
-| 422 | `margin-exceeded` (with `availableMargin` and `installment`), `term-above-agreement-limit`, `simulation-expired`, `idempotency-key-reused`, `invalid-cpf`, `customer-not-found`, `agreement-not-found`, `simulation-not-found` |
+| 422 | `margin-exceeded` (with `availableMargin` and `installment`), `term-above-agreement-limit`, `term-too-long-for-amount`, `simulation-expired`, `idempotency-key-reused`, `invalid-cpf`, `customer-not-found`, `agreement-not-found`, `simulation-not-found` |
 | 500 | `internal-error` (no internal detail in the body) |
 
 Errors that Spring MVC raises before a controller runs (unknown route, wrong method, unreadable JSON, a path id that is not a UUID) are also problem details with a `correlationId`, but with `type: about:blank` and no `code`.
