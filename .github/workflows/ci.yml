@@ -91,7 +91,9 @@ jobs:
             | jq -r .id)
           test -n "$agreement" && test "$agreement" != "null"
           curl -fsS http://127.0.0.1:8080/v3/api-docs | jq -e '.paths["/api/v1/contracts"]' > /dev/null
-          curl -fsS http://127.0.0.1:8080/actuator/prometheus | grep -q '^jvm_memory_used_bytes'
+          # Store first: "grep -q" closes the pipe early and curl would fail with a write error.
+          metrics=$(curl -fsS http://127.0.0.1:8080/actuator/prometheus)
+          grep -q '^jvm_memory_used_bytes' <<< "$metrics"
 
       - name: Stop
         if: always()
