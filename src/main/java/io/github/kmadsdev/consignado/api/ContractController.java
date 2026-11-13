@@ -31,6 +31,11 @@ import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 @Tag(name = "Contracts", description = "Contract lifecycle: PROPOSED -> APPROVED/REJECTED -> ACTIVE -> SETTLED/CANCELLED")
 class ContractController {
 
+    /**
+     * JPA takes the offset (page * size) as an int, so an unbounded page number ends in a 500.
+     * 10,000 pages of 100 rows is far beyond what an offset listing should serve anyway.
+     */
+    private static final int MAX_PAGE = 10_000;
     private static final String IF_MATCH_DOC = "Optional. The ETag from the last read. A stale value returns 412.";
 
     private final ContractService service;
@@ -67,7 +72,7 @@ class ContractController {
     @Operation(summary = "List contracts, newest first")
     PageView<ContractView> list(@RequestParam(required = false) UUID customerId,
                                 @RequestParam(required = false) ContractStatus status,
-                                @RequestParam(defaultValue = "0") @Min(0) int page,
+                                @RequestParam(defaultValue = "0") @Min(0) @Max(MAX_PAGE) int page,
                                 @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size) {
         return service.list(customerId, status, page, size);
     }
