@@ -4,7 +4,8 @@ spring:
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/consignado}
     username: ${DB_USERNAME:consignado}
-    password: ${DB_PASSWORD}
+    # No default on purpose: set DB_PASSWORD in the environment (docker-compose.yml does it for local runs).
+    password: ${DB_PASSWORD:}
   jpa:
     open-in-view: false
     hibernate:
