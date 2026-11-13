@@ -8,6 +8,7 @@ import io.github.kmadsdev.consignado.domain.Cpf;
 import io.github.kmadsdev.consignado.domain.PriceAmortization;
 import io.github.kmadsdev.consignado.testsupport.PostgresTestcontainer;
 import io.github.kmadsdev.consignado.testsupport.TestCpfs;
+import jakarta.persistence.EntityManagerFactory;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -15,6 +16,8 @@ import java.time.temporal.ChronoUnit;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.UUID;
+import org.hibernate.SessionFactory;
+import org.hibernate.stat.Statistics;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -32,7 +35,7 @@ import org.springframework.orm.ObjectOptimisticLockingFailureException;
  * Repository slice against PostgreSQL with the real Flyway migrations. Hibernate runs
  * with ddl-auto=validate, so this test also fails if a mapping drifts from the schema.
  */
-@DataJpaTest
+@DataJpaTest(properties = "spring.jpa.properties.hibernate.generate_statistics=true")
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @Import(PostgresTestcontainer.class)
 class PersistenceIT {
@@ -51,6 +54,8 @@ class PersistenceIT {
     private LoanContractRepository contracts;
     @Autowired
     private InstallmentRepository installments;
+    @Autowired
+    private EntityManagerFactory emf;
 
     private Customer customer;
 
@@ -169,6 +174,24 @@ class PersistenceIT {
 
         assertThat(loaded).extracting(Installment::getNumber).containsExactly(1, 2, 3);
         assertThat(loaded.getLast().getRemainingBalance()).isEqualByComparingTo("0");
+    }
+
+    @Test
+    void savingNewRowsWithAssignedIdsIssuesOnlyInserts() {
+        LoanContract contract = contractIn(ContractStatus.ACTIVE, "340.02");
+        var schedule = PriceAmortization.schedule(
+                new BigDecimal("1000.00"), new BigDecimal("0.01"), 3, LocalDate.of(2026, 4, 1));
+        Statistics statistics = emf.unwrap(SessionFactory.class).getStatistics();
+        em.flush();
+        statistics.clear();
+
+        installments.saveAll(schedule.stream().map(line -> Installment.of(contract.getId(), line)).toList());
+        simulation("100.00");
+        em.flush();
+
+        // Without Persistable, Spring Data sees an id and calls merge(): one SELECT per row first.
+        assertThat(statistics.getPrepareStatementCount()).as("3 installments + 1 simulation, inserts only")
+                .isEqualTo(4);
     }
 
     private LoanSimulation simulation(String installment) {

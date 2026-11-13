@@ -4,18 +4,30 @@ import io.github.kmadsdev.consignado.domain.ScheduledInstallment;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
+import jakarta.persistence.PostLoad;
+import jakarta.persistence.PostPersist;
 import jakarta.persistence.Table;
+import jakarta.persistence.Transient;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.UUID;
+import org.springframework.data.domain.Persistable;
 
 /** One persisted line of an active contract's schedule. Written once, never updated. */
 @Entity
 @Table(name = "installment")
-public class Installment {
+public class Installment implements Persistable<UUID> {
 
     @Id
     private UUID id;
+
+    /**
+     * The id is assigned in Java and there is no version column, so Spring Data cannot tell a
+     * new row from a stored one and its save() would call merge(): one SELECT before every
+     * INSERT. This flag answers the question instead.
+     */
+    @Transient
+    private boolean isNew = true;
 
     @Column(name = "contract_id", nullable = false, updatable = false)
     private UUID contractId;
@@ -55,6 +67,7 @@ public class Installment {
         return installment;
     }
 
+    @Override
     public UUID getId() {
         return id;
     }
@@ -85,5 +98,16 @@ public class Installment {
 
     public BigDecimal getRemainingBalance() {
         return remainingBalance;
+    }
+
+    @Override
+    public boolean isNew() {
+        return isNew;
+    }
+
+    @PostPersist
+    @PostLoad
+    void markNotNew() {
+        isNew = false;
     }
 }
