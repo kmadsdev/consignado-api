@@ -1,0 +1,33 @@
+# Local run only. The credentials below are throwaway development values;
+# override them through the environment, never commit real ones.
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: consignado
+      POSTGRES_USER: ${POSTGRES_USER:-consignado}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-local-dev-only}
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d consignado"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  app:
+    build: .
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/consignado
+      DB_USERNAME: ${POSTGRES_USER:-consignado}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-local-dev-only}
+    ports:
+      - "127.0.0.1:${APP_PORT:-8080}:8080"
+
+volumes:
+  pgdata:
