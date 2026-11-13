@@ -28,3 +28,39 @@ spring:
 
 server:
   shutdown: graceful
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info, metrics, prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      group:
+        # Ready only when the database answers; liveness stays independent of it.
+        readiness:
+          include: readinessState, db
+  metrics:
+    tags:
+      application: ${spring.application.name}
+    distribution:
+      percentiles-histogram:
+        "[http.server.requests]": true
+
+logging:
+  structured:
+    format:
+      console: io.github.kmadsdev.consignado.observability.JsonLogFormatter
+
+consignado:
+  simulation:
+    validity: P7D
+  outbox:
+    relay:
+      enabled: true
+    publisher: log
+    poll-interval: PT2S
+    batch-size: 100
+    max-attempts: 10

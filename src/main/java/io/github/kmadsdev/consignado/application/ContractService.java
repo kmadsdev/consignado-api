@@ -9,6 +9,7 @@ import io.github.kmadsdev.consignado.domain.ContractStatus;
 import io.github.kmadsdev.consignado.domain.IllegalStatusTransitionException;
 import io.github.kmadsdev.consignado.domain.MarginPolicy;
 import io.github.kmadsdev.consignado.domain.PriceAmortization;
+import io.github.kmadsdev.consignado.observability.BusinessMetrics;
 import io.github.kmadsdev.consignado.persistence.Agreement;
 import io.github.kmadsdev.consignado.persistence.AgreementRepository;
 import io.github.kmadsdev.consignado.persistence.Customer;
@@ -42,20 +43,22 @@ public class ContractService {
     private final AgreementRepository agreements;
     private final InstallmentRepository installments;
     private final ContractEvents events;
+    private final BusinessMetrics metrics;
     private final TransactionTemplate tx;
     private final Clock clock;
 
     @SuppressWarnings("java:S107")
     public ContractService(LoanContractRepository contracts, LoanSimulationRepository simulations,
                            CustomerRepository customers, AgreementRepository agreements,
-                           InstallmentRepository installments, ContractEvents events, TransactionTemplate tx,
-                           Clock clock) {
+                           InstallmentRepository installments, ContractEvents events, BusinessMetrics metrics,
+                           TransactionTemplate tx, Clock clock) {
         this.contracts = contracts;
         this.simulations = simulations;
         this.customers = customers;
         this.agreements = agreements;
         this.installments = installments;
         this.events = events;
+        this.metrics = metrics;
         this.tx = tx;
         this.clock = clock;
     }
@@ -159,6 +162,7 @@ public class ContractService {
         }
         LoanContract contract = contracts.saveAndFlush(LoanContract.propose(simulation, idempotencyKey, now));
         events.statusChanged(contract, ContractStatus.SIMULATED);
+        metrics.contractTransition(ContractStatus.SIMULATED, ContractStatus.PROPOSED);
         return ContractView.from(contract);
     }
 
@@ -175,6 +179,7 @@ public class ContractService {
         LoanContract saved = contracts.saveAndFlush(contract);
         // Same transaction as the status change: both commit or neither does.
         events.statusChanged(saved, previous);
+        metrics.contractTransition(previous, target);
         return ContractView.from(saved);
     }
 
