@@ -41,18 +41,21 @@ public class ContractService {
     private final CustomerRepository customers;
     private final AgreementRepository agreements;
     private final InstallmentRepository installments;
+    private final ContractEvents events;
     private final TransactionTemplate tx;
     private final Clock clock;
 
     @SuppressWarnings("java:S107")
     public ContractService(LoanContractRepository contracts, LoanSimulationRepository simulations,
                            CustomerRepository customers, AgreementRepository agreements,
-                           InstallmentRepository installments, TransactionTemplate tx, Clock clock) {
+                           InstallmentRepository installments, ContractEvents events, TransactionTemplate tx,
+                           Clock clock) {
         this.contracts = contracts;
         this.simulations = simulations;
         this.customers = customers;
         this.agreements = agreements;
         this.installments = installments;
+        this.events = events;
         this.tx = tx;
         this.clock = clock;
     }
@@ -155,6 +158,7 @@ public class ContractService {
             throw simulationAlreadyUsed();
         }
         LoanContract contract = contracts.saveAndFlush(LoanContract.propose(simulation, idempotencyKey, now));
+        events.statusChanged(contract, ContractStatus.SIMULATED);
         return ContractView.from(contract);
     }
 
@@ -166,9 +170,12 @@ public class ContractService {
     }
 
     private ContractView transition(LoanContract contract, ContractStatus target, String reason) {
-        contract.moveTo(target, reason, clock.instant());
+        ContractStatus previous = contract.moveTo(target, reason, clock.instant());
         // Flush now so a concurrent update fails here, inside the repository's exception translation.
-        return ContractView.from(contracts.saveAndFlush(contract));
+        LoanContract saved = contracts.saveAndFlush(contract);
+        // Same transaction as the status change: both commit or neither does.
+        events.statusChanged(saved, previous);
+        return ContractView.from(saved);
     }
 
     private static void requireTransition(LoanContract contract, ContractStatus target) {
