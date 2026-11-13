@@ -6,6 +6,10 @@ API REST de crédito consignado: convênios, clientes, simulação com tabela Pr
 
 Read in English: [README.md](README.md)
 
+![Gravação de terminal: curl cria um convênio e um cliente e depois simula um empréstimo de 84 meses, mostrando a parcela e a primeira e a última linha do cronograma](docs/media/consignado-api-simulate.gif)
+
+*Execução local do passo a passo do README.*
+
 ## O que ele faz
 
 No consignado, a parcela é descontada direto da folha de pagamento. Por isso o convênio com o empregador limita quanto do salário líquido as parcelas podem comprometer (a margem consignável) e qual o prazo máximo. A API:

@@ -6,6 +6,10 @@ This is a study project I built to practice backend design on a real banking pro
 
 Leia em português: [README.pt-br.md](README.pt-br.md)
 
+![Terminal recording: curl creates an employer agreement and a customer, then simulates an 84-month loan and prints the installment and the first and last schedule rows](docs/media/consignado-api-simulate.gif)
+
+*Local run of the README walkthrough.*
+
 ## What it does
 
 In a consignado loan, the installment is deducted from the borrower's paycheck, so the employer agreement (convênio) caps how much of the net salary installments may take (the consignable margin) and how long the loan may run. This API:
