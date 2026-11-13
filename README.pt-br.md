@@ -147,7 +147,7 @@ curl -s -X POST localhost:8080/api/v1/simulations -H 'Content-Type: application/
 }
 ```
 
-A última parcela sai R$ 0,80 maior que as outras porque ela absorve a sobra do arredondamento ([ADR 0002](docs/adr/0002-money-and-rounding.md)).
+A última parcela sai R$ 0,80 maior que as outras porque ela absorve a sobra do arredondamento. Por isso a checagem de margem usa a maior parcela do cronograma, e não só a parcela regular ([ADR 0002](docs/adr/0002-money-and-rounding.md)).
 
 **4. Contrato** com chave de idempotência:
 

@@ -13,7 +13,10 @@ A loan schedule adds up many rounded values. If rounding is not explicit, the su
 2. Intermediate math uses `MathContext.DECIMAL128` (34 significant digits). Only stored values are rounded.
 3. Rounding is `HALF_EVEN` (banker's rounding). Over many installments, `HALF_UP` pushes errors in one direction; `HALF_EVEN` does not.
 4. Price (French) system: `PMT = P * i * (1+i)^n / ((1+i)^n - 1)`, rounded to cents. Interest of each period is `round(balance * i)`. Amortization is `PMT - interest`.
-5. **The last installment absorbs the remainder.** It amortizes the whole remaining balance, so the balance ends at exactly 0.00 and the sum of amortizations equals the principal to the cent. The last installment can differ from the others by a few cents.
+5. **The last installment absorbs the remainder.** It amortizes the whole remaining balance, so the balance ends at exactly 0.00 and the sum of amortizations equals the principal to the cent.
+   The remainder is not always a few cents. Each regular line carries up to half a cent of PMT rounding and half a cent of interest rounding, and that error earns interest until the end: `|last - PMT| <= 0.01 * ((1+i)^(n-1) - 1) / i`. At 1.85% a month the bound is about R$ 1.93 for 84 months and R$ 4.25 for 120 months, but it grows fast with long terms (R$ 15,000.00 over 84 months: PMT 353.24, last 354.04).
+   - The **margin is checked against the largest installment** of the schedule, not only PMT, in the simulation and again on approval.
+   - When the rounded PMT would pay the loan off before the last month (a small amount over a long term, for example R$ 100.00 at 0% over 420 months), the simulation is rejected with 422 `term-too-long-for-amount`.
 6. The **margin cap rounds DOWN**, not HALF_EVEN. The margin is a legal ceiling: rounding it up by one cent would allow an installment above the limit.
 7. Due dates are computed from the first due date with `plusMonths(n - 1)`, not by chaining. A loan that starts on 31 January is due on 28 February and then on 31 March again, not on the 28th forever.
 
@@ -28,5 +31,5 @@ A wrong CET is worse than no CET in a lending product, so the API does not retur
 
 ## Consequences
 
-- `PriceAmortizationTest` checks a hand-computed 3-month schedule line by line, the HALF_EVEN tie case (`101.505 -> 101.50`), a zero rate, end-of-month dates, and invariants over several schedules up to 420 months.
-- The margin check compares the regular installment (PMT). The last installment may be a few cents higher; that difference is bounded and documented here.
+- `PriceAmortizationTest` checks a hand-computed 3-month schedule line by line, the HALF_EVEN tie case (`101.505 -> 101.50`), a zero rate, end-of-month dates, the early-payoff rejection, and invariants over several schedules up to 420 months, with the remainder bound above.
+- Committed margin (the sum over a customer's APPROVED and ACTIVE contracts) still adds up their regular PMT, which is the amount deducted in every month but the last one. A contract in its final month can deduct its remainder on top; that is small next to the margin and accepted here.
