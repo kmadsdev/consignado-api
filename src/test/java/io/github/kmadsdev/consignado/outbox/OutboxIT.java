@@ -14,6 +14,9 @@ import org.springframework.http.HttpStatus;
 
 class OutboxIT extends ApiTestBase {
 
+    /** consignado.outbox.max-attempts in application.yml. */
+    private static final int MAX_ATTEMPTS = 10;
+
     @Autowired
     private OutboxRelay relay;
     @Autowired
@@ -61,6 +64,25 @@ class OutboxIT extends ApiTestBase {
 
         assertThat(publisher.publishedFor(contract)).extracting(OutboxMessage::eventType)
                 .containsExactly("contract.proposed", "contract.approved", "contract.active");
+    }
+
+    @Test
+    void anEventThatReachedTheAttemptLimitHoldsBackTheLaterEventsOfItsContract() {
+        drain();
+        UUID contract = activeContract();
+        publisher.failNextFor(contract, MAX_ATTEMPTS);
+        for (int i = 0; i < MAX_ATTEMPTS; i++) {
+            drainOnce();
+        }
+        assertThat(outbox.findByAggregateIdInOrder(contract).getFirst().getAttempts()).isEqualTo(MAX_ATTEMPTS);
+
+        drain();
+
+        // "contract.proposed" is dead. Publishing "approved" and "active" now would hand the
+        // consumer a contract it never saw proposed.
+        assertThat(publisher.publishedFor(contract)).isEmpty();
+        assertThat(outbox.findByAggregateIdInOrder(contract))
+                .allSatisfy(event -> assertThat(event.getPublishedAt()).isNull());
     }
 
     @Test

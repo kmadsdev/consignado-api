@@ -23,7 +23,7 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <p>Failures: the row keeps {@code attempts} and {@code last_error}. After
  * {@code maxAttempts} the row is no longer picked up and needs a person to look at it
- * (the pending count metric shows it).
+ * (the pending count metric shows it). Later events of the same aggregate wait behind it.
  */
 @Component
 public class OutboxRelay {
