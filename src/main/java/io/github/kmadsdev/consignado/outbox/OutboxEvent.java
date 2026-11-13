@@ -3,21 +3,33 @@ package io.github.kmadsdev.consignado.outbox;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
+import jakarta.persistence.PostLoad;
+import jakarta.persistence.PostPersist;
 import jakarta.persistence.Table;
+import jakarta.persistence.Transient;
 import java.time.Instant;
 import java.util.UUID;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
+import org.springframework.data.domain.Persistable;
 
 /** A row of outbox_event. The identity column "position" is read only by SQL, not mapped. */
 @Entity
 @Table(name = "outbox_event")
-public class OutboxEvent {
+public class OutboxEvent implements Persistable<UUID> {
 
     private static final int MAX_ERROR_LENGTH = 500;
 
     @Id
     private UUID id;
+
+    /**
+     * The id is assigned in Java and there is no version column, so Spring Data cannot tell a
+     * new row from a stored one and its save() would call merge(): one SELECT before every
+     * INSERT. This flag answers the question instead.
+     */
+    @Transient
+    private boolean isNew = true;
 
     @Column(name = "aggregate_type", nullable = false, updatable = false, length = 60)
     private String aggregateType;
@@ -77,6 +89,7 @@ public class OutboxEvent {
         lastError = error == null || error.length() <= MAX_ERROR_LENGTH ? error : error.substring(0, MAX_ERROR_LENGTH);
     }
 
+    @Override
     public UUID getId() {
         return id;
     }
@@ -115,5 +128,16 @@ public class OutboxEvent {
 
     public String getLastError() {
         return lastError;
+    }
+
+    @Override
+    public boolean isNew() {
+        return isNew;
+    }
+
+    @PostPersist
+    @PostLoad
+    void markNotNew() {
+        isNew = false;
     }
 }
