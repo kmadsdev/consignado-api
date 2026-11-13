@@ -26,7 +26,8 @@ import org.springframework.http.ResponseEntity;
  * Full application on a random port, real PostgreSQL, real HTTP. Subclasses share one
  * Spring context (and one database container) through context caching.
  */
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
+        properties = "consignado.outbox.relay.enabled=false")
 @Import({PostgresTestcontainer.class, ApiTestBase.FixedClockConfig.class})
 public abstract class ApiTestBase {
 
@@ -44,6 +45,12 @@ public abstract class ApiTestBase {
         @Primary
         MutableClock testClock() {
             return new MutableClock(START);
+        }
+
+        @Bean
+        @Primary
+        RecordingEventPublisher recordingEventPublisher() {
+            return new RecordingEventPublisher();
         }
     }
 
