@@ -143,6 +143,14 @@ class ContractLifecycleIT extends ApiTestBase {
     }
 
     @Test
+    void aPageNumberBeyondTheOffsetRangeIs400NotA500() {
+        ResponseEntity<JsonNode> response = get("/api/v1/contracts?page=2147483647&size=100");
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(response.getBody().get("code").asText()).isEqualTo("validation-failed");
+    }
+
+    @Test
     void concurrentApprovalsForTheSameCustomerCannotBothConsumeTheMargin() throws Exception {
         UUID customer = createCustomer(createAgreement("35.00", 96, "0.015"), "3000.00");
         UUID first = id(propose(id(simulate(customer, "6666.00", 12)), UUID.randomUUID().toString()));
