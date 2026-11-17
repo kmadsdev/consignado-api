@@ -13,7 +13,11 @@ for v in IMAGE APP_CLIENT_ID TENANT_ID KV PG_HOST PG_DB PG_ADMIN; do
 done
 command -v envsubst >/dev/null || { echo "render.sh: envsubst not found (macOS: brew install gettext)" >&2; exit 1; }
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# The namespace is a cluster-level object. The cluster admin creates it once
+# (WITH_NAMESPACE=1 ./deploy/render.sh | kubectl apply -f -); the pipeline has rights
+# inside the namespace only, so it leaves that file out.
 for f in "$DIR"/k8s/*.yaml; do
+  if [[ "$(basename "$f")" == 00-namespace.yaml && "${WITH_NAMESPACE:-0}" != "1" ]]; then continue; fi
   envsubst "$VARS" < "$f"
   echo "---"
 done
