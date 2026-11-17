@@ -77,6 +77,15 @@ public final class Views {
         }
     }
 
+    /**
+     * A quote that was never stored: no id, no expiry. The margin fields are null (and left
+     * out of the JSON) when the request carried no income.
+     */
+    public record PreviewView(BigDecimal principal, int termMonths, BigDecimal monthlyInterestRate,
+                              BigDecimal installment, BigDecimal totalAmount, BigDecimal totalInterest,
+                              BigDecimal marginLimit, Boolean withinMargin) {
+    }
+
     public record ContractView(UUID id, UUID simulationId, UUID customerId, ContractStatus status,
                                BigDecimal principal, BigDecimal monthlyInterestRate, int termMonths,
                                BigDecimal installmentAmount, String statusReason, long version,

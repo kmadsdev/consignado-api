@@ -1,5 +1,8 @@
 package io.github.kmadsdev.consignado.api;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import io.github.kmadsdev.consignado.domain.PriceAmortization;
+import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Digits;
@@ -55,6 +58,30 @@ final class Requests {
             BigDecimal amount,
             @NotNull @Min(1) @Max(420)
             Integer termMonths) {
+    }
+
+    /**
+     * The guest calculation. The bounds are those of a stored simulation (amount) and of the
+     * domain (term, rate), so the largest schedule a guest can ask for is 420 lines.
+     */
+    record PreviewSimulation(
+            @NotNull @DecimalMin("100.00") @DecimalMax("1000000.00") @Digits(integer = 13, fraction = 2)
+            BigDecimal principal,
+            @NotNull @Min(1) @Max(PriceAmortization.MAX_TERM_MONTHS)
+            Integer termMonths,
+            @NotNull @DecimalMin("0") @DecimalMax(value = "1", inclusive = false) @Digits(integer = 1, fraction = 6)
+            BigDecimal monthlyInterestRate,
+            @DecimalMin(value = "0", inclusive = false) @Digits(integer = 13, fraction = 2)
+            BigDecimal monthlyIncome,
+            @DecimalMin(value = "0", inclusive = false) @DecimalMax("100") @Digits(integer = 3, fraction = 2)
+            BigDecimal maxMarginPercent) {
+
+        /** The margin check needs both numbers. One without the other is a mistake, not a default. */
+        @JsonIgnore
+        @AssertTrue(message = "monthlyIncome and maxMarginPercent must be sent together")
+        boolean isMarginInputComplete() {
+            return (monthlyIncome == null) == (maxMarginPercent == null);
+        }
     }
 
     record CreateContract(@NotNull UUID simulationId) {

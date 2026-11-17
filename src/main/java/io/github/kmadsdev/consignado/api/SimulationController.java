@@ -1,7 +1,10 @@
 package io.github.kmadsdev.consignado.api;
 
+import io.github.kmadsdev.consignado.application.SimulationPreviewService;
+import io.github.kmadsdev.consignado.application.SimulationPreviewService.PreviewInput;
 import io.github.kmadsdev.consignado.application.SimulationService;
 import io.github.kmadsdev.consignado.application.Views.PageView;
+import io.github.kmadsdev.consignado.application.Views.PreviewView;
 import io.github.kmadsdev.consignado.application.Views.SimulationView;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -25,9 +28,11 @@ import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 class SimulationController {
 
     private final SimulationService service;
+    private final SimulationPreviewService previews;
 
-    SimulationController(SimulationService service) {
+    SimulationController(SimulationService service, SimulationPreviewService previews) {
         this.service = service;
+        this.previews = previews;
     }
 
     @PostMapping
@@ -37,6 +42,16 @@ class SimulationController {
         return ResponseEntity.created(
                 ServletUriComponentsBuilder.fromCurrentRequest().path("/{id}").buildAndExpand(view.id()).toUri())
                 .body(view);
+    }
+
+    @PostMapping("/preview")
+    @Operation(summary = "Preview a loan without a customer",
+            description = "A stateless calculation with the same Price schedule and rounding as a stored "
+                    + "simulation. Nothing is read from or written to the database. Send monthlyIncome and "
+                    + "maxMarginPercent together to get marginLimit and withinMargin")
+    PreviewView preview(@Valid @RequestBody Requests.PreviewSimulation body) {
+        return previews.preview(new PreviewInput(body.principal(), body.termMonths(), body.monthlyInterestRate(),
+                body.monthlyIncome(), body.maxMarginPercent()));
     }
 
     @GetMapping("/{id}")
