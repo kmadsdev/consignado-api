@@ -1,0 +1,17 @@
+# Public entry: an Azure Load Balancer with a public IP.
+# The API has no authentication, so only ALLOWED_CIDR may reach it.
+apiVersion: v1
+kind: Service
+metadata:
+  name: consignado-api
+  namespace: consignado
+spec:
+  type: LoadBalancer
+  selector:
+    app: consignado-api
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+  loadBalancerSourceRanges:
+    - "${ALLOWED_CIDR}"

@@ -1,0 +1,89 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: consignado-api
+  namespace: consignado
+  labels:
+    app: consignado-api
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: consignado-api
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0          # a new pod must be Ready before an old one stops
+  template:
+    metadata:
+      labels:
+        app: consignado-api
+        azure.workload.identity/use: "true"
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/actuator/prometheus"
+        prometheus.io/port: "8080"
+    spec:
+      serviceAccountName: consignado-api
+      terminationGracePeriodSeconds: 45     # server.shutdown=graceful needs time to drain
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001                    # the user the Dockerfile creates
+        runAsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: app
+          image: "${IMAGE}"
+          ports:
+            - name: http
+              containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: consignado-api
+          env:
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: consignado-db
+                  key: db-password
+          volumeMounts:
+            - name: kv-secrets
+              mountPath: /mnt/secrets
+              readOnly: true
+          startupProbe:                     # JVM start + Flyway migration: up to 150 s
+            httpGet:
+              path: /actuator/health/liveness
+              port: http
+            periodSeconds: 5
+            failureThreshold: 30
+          readinessProbe:                   # Ready only when PostgreSQL answers
+            httpGet:
+              path: /actuator/health/readiness
+              port: http
+            periodSeconds: 10
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: http
+            periodSeconds: 10
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 150m                     # the 1-node lab has about 720m free; 3 pods + 1 surge pod = 600m
+              memory: 512Mi
+            limits:
+              memory: 768Mi                 # the JVM sizes its heap at 75% of this limit
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+      volumes:
+        - name: kv-secrets
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: consignado-kv
