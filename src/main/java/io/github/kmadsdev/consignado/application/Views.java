@@ -68,6 +68,13 @@ public final class Views {
                     s.getAvailableMargin(), s.getCreatedAt(), s.getExpiresAt(),
                     schedule.stream().map(InstallmentView::from).toList());
         }
+
+        /** For listings. The schedule is null, so it is left out of the JSON (non_null inclusion). */
+        static SimulationView summary(LoanSimulation s) {
+            return new SimulationView(s.getId(), s.getCustomerId(), s.getAgreementId(), s.getPrincipal(),
+                    s.getMonthlyInterestRate(), s.getTermMonths(), s.getInstallmentAmount(), s.getTotalPayable(),
+                    s.getAvailableMargin(), s.getCreatedAt(), s.getExpiresAt(), null);
+        }
     }
 
     public record ContractView(UUID id, UUID simulationId, UUID customerId, ContractStatus status,

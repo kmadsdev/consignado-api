@@ -5,6 +5,7 @@ import io.github.kmadsdev.consignado.persistence.Agreement;
 import io.github.kmadsdev.consignado.persistence.AgreementRepository;
 import java.math.BigDecimal;
 import java.time.Clock;
+import java.util.List;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -39,5 +40,10 @@ public class AgreementService {
         return agreements.findById(id)
                 .map(AgreementView::from)
                 .orElseThrow(() -> new ResourceNotFoundException("Agreement", id));
+    }
+
+    /** Not paged: agreements are reference data, a handful of rows per lender. */
+    public List<AgreementView> list() {
+        return agreements.findAll(Paging.NEWEST_FIRST).stream().map(AgreementView::from).toList();
     }
 }
