@@ -18,7 +18,7 @@ Live since 2026-11-17. Measured through the edge: serverless host 18.6 to 18.9 s
 
 - Start here: [docs/platform/README.md](docs/platform/README.md) (what is live, what is not verified)
 - [Architecture diagrams](docs/platform/architecture.md) · [Decisions](docs/platform/decisions.md) · [Runbook](docs/platform/operations.md)
-- [Security and privacy](docs/platform/security-and-privacy.md) · [Product decisions](docs/platform/business.md) · ADRs 0008 to 0012 in [docs/adr](docs/adr)
+- [Security and privacy](docs/platform/security-and-privacy.md) · [Product decisions](docs/platform/business.md) · ADRs 0008 to 0013 in [docs/adr](docs/adr)
 
 ## What it does
 
@@ -273,6 +273,17 @@ Every error is `application/problem+json` (RFC 9457, which replaced RFC 7807) wi
 
 Errors that Spring MVC raises before a controller runs (unknown route, wrong method, unreadable JSON, a path id that is not a UUID) are also problem details with a `correlationId`, but with `type: about:blank` and no `code`.
 
+## Per-request timing headers
+
+Every response outside `/actuator` says what the request did ([ADR 0013](docs/adr/0013-per-request-timing-headers.md)):
+
+```
+Server-Timing: app;dur=6.6, db;dur=2.4;desc="3 statements"
+X-Consignado-Timing: {"instance":"894a9bcc0d0c","appMs":6.6,"db":{"ms":2.4,"statements":3,"select":2,"insert":1,"update":0,"delete":0,"other":0,"connectionMs":0.0,"transactions":1}}
+```
+
+`appMs` is the time inside the application, `db.ms` the sum of the JDBC statement times, `connectionMs` the wait for a pooled connection. The loan preview always answers `"db":null` and has no `db` entry in `Server-Timing`: it runs no statement. Only numbers leave the API: no SQL, no parameter, no entity data. The same numbers go into the request log line and into the metrics `consignado.db.request.statements` and `consignado.db.request.time`. The gateway uses the header to draw the `app` and `database` stages of each request.
+
 ## Design decisions
 
 | ADR | Decision |
@@ -284,6 +295,7 @@ Errors that Spring MVC raises before a controller runs (unknown route, wrong met
 | [0005](docs/adr/0005-transactional-outbox.md) | Transactional outbox, `SKIP LOCKED` relay, `EventPublisher` port; where a broker adapter plugs in |
 | [0006](docs/adr/0006-observability.md) | Correlation id, JSON logs, readiness vs liveness, business metrics, no CPF in logs or URLs |
 | [0007](docs/adr/0007-two-hosts-one-api.md) | Two hosts (AKS and a function) run one jar on one database; no login in the API, only the gateway reaches it; stateless preview for guests; no delete and one guarded income change |
+| [0013](docs/adr/0013-per-request-timing-headers.md) | `Server-Timing` and `X-Consignado-Timing` on every response: app time and JDBC work by kind, through a datasource-proxy; numbers only, never SQL or data |
 
 Some smaller choices:
 
@@ -297,13 +309,13 @@ Some smaller choices:
 
 | Kind | Classes | What they cover |
 |---|---|---|
-| Unit | `CpfTest`, `PriceAmortizationTest`, `MarginPolicyTest`, `ContractStatusTest`, `ETagsTest`, `CorrelationIdFilterTest`, `JsonLogFormatterTest`, `SimulationPreviewServiceTest` | Check digits, a hand-computed schedule, HALF_EVEN ties, zero rate, 420-month schedules, margin rounding, the income guard, all 49 status pairs, the preview numbers |
+| Unit | `CpfTest`, `PriceAmortizationTest`, `MarginPolicyTest`, `ContractStatusTest`, `ETagsTest`, `CorrelationIdFilterTest`, `JsonLogFormatterTest`, `SimulationPreviewServiceTest`, `RequestTimingTest`, `RequestTimingFilterTest`, `JdbcTimingListenerTest` | Check digits, a hand-computed schedule, HALF_EVEN ties, zero rate, 420-month schedules, margin rounding, the income guard, all 49 status pairs, the preview numbers, the exact timing header strings and their commit point |
 | Web slice | `ContractControllerTest`, `CustomerControllerTest`, `SimulationPreviewTest` (`@WebMvcTest`) | Status codes, headers, problem bodies, validation, paging bounds, nothing leaked on 500. `SimulationPreviewTest` runs the real preview in a context with no `DataSource`, no JPA and no repository |
 | Repository | `PersistenceIT` (`@DataJpaTest` + PostgreSQL) | Migrations, constraints, optimistic locking, margin sum, pagination |
-| Integration | `ContractLifecycleIT`, `CustomerIncomeIT`, `ReadEndpointsIT`, `SimulationPreviewIT`, `OutboxIT`, `ObservabilityIT` (full app + PostgreSQL over HTTP) | Full lifecycle, concurrent idempotent creates, concurrent approvals, an income cut racing an approval, listings newest first, the preview equal to a stored simulation, outbox ordering and retry, probes and metrics |
+| Integration | `ContractLifecycleIT`, `CustomerIncomeIT`, `ReadEndpointsIT`, `SimulationPreviewIT`, `OutboxIT`, `ObservabilityIT`, `RequestTimingIT` (full app + PostgreSQL over HTTP) | Full lifecycle, concurrent idempotent creates, concurrent approvals, an income cut racing an approval, listings newest first, the preview equal to a stored simulation, outbox ordering and retry, probes and metrics, timing headers on 201/200/404/422/400 with `"db":null` on the preview |
 | Architecture | `ArchitectureTest` (ArchUnit) | Layer rules, pure domain, constructor injection, no storage dependency in the guest preview |
 
-Test CPFs are generated at runtime with valid check digits; there is no real CPF in the repository. The build fails below 80% line coverage (JaCoCo); the last run was at about 96%.
+Test CPFs are generated at runtime with valid check digits; there is no real CPF in the repository. The build fails below 80% line coverage (JaCoCo); the last run was at about 95%.
 
 ## What is not built
 
