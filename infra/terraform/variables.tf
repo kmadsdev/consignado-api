@@ -1,0 +1,153 @@
+variable "subscription_id" {
+  description = "Subscription \"Azure for Students\"."
+  type        = string
+  default     = "843b8ff6-4318-4199-9144-da130b3ee4ea"
+}
+
+variable "location" {
+  description = "Main region. The subscription policy allows only: belgiumcentral, northcentralus, chilecentral, mexicocentral, southafricanorth."
+  type        = string
+  default     = "belgiumcentral"
+}
+
+variable "pg_location" {
+  description = "Region of the PostgreSQL server. belgiumcentral had no B1ms capacity (RegionalAllocationFailed, 2026-11-17)."
+  type        = string
+  default     = "northcentralus"
+}
+
+variable "pg_server_name" {
+  description = "Name of the PostgreSQL server. A failed create reserves the name in that region for some time: then add a suffix here."
+  type        = string
+  default     = "psql-consignado-km01"
+}
+
+variable "suffix" {
+  description = "Suffix of the globally unique names."
+  type        = string
+  default     = "km01"
+}
+
+variable "owner_email" {
+  description = "Owner: budget alerts and gateway notifications."
+  type        = string
+  default     = "kaiquemoreira520@gmail.com"
+}
+
+variable "custom_domains" {
+  description = "Front Door custom domains (key = resource name)."
+  type        = map(string)
+  default = {
+    consignado         = "consignado.kmads.dev"
+    cluster-consignado = "cluster.consignado.kmads.dev"
+  }
+}
+
+variable "github_owner" {
+  description = "GitHub owner login and numeric id (immutable OIDC subject format)."
+  type = object({
+    login = string
+    id    = number
+  })
+  default = {
+    login = "kmadsdev"
+    id    = 158073300
+  }
+}
+
+variable "github_repositories" {
+  description = "Repositories that deploy from the main branch: name => numeric repository id."
+  type        = map(number)
+  default = {
+    consignado-api        = 1456253050
+    consignado-front      = 1460963568
+    consignado-serverless = 1460963640
+  }
+}
+
+variable "aks_node_vm_size" {
+  type    = string
+  default = "Standard_D2as_v4"
+}
+
+variable "aks_internal_lb_ip" {
+  description = "Fixed IP of the internal load balancer that Kubernetes creates in snet-aks."
+  type        = string
+  default     = "10.10.3.200"
+}
+
+variable "entra_sign_in_audience" {
+  description = "Who can sign in to the two app registrations. The integrator decides (user flows are not managed here)."
+  type        = string
+  default     = "AzureADMyOrg"
+}
+
+variable "budget_amount" {
+  description = "Monthly budget of the subscription, in the billing currency (USD)."
+  type        = number
+  default     = 60
+}
+
+variable "budget_start_date" {
+  description = "First day of the first budget month (must be the first of a month; do not change after create)."
+  type        = string
+  default     = "2026-11-01T00:00:00Z"
+}
+
+variable "budget_webhook_url" {
+  description = "Gateway webhook that the action group calls at 100 percent. Empty = no webhook (the integrator sets it later)."
+  type        = string
+  default     = ""
+}
+
+variable "rate_limit_api_per_minute" {
+  description = "WAF: requests per minute and client IP on /api/*."
+  type        = number
+  default     = 120
+}
+
+variable "rate_limit_all_per_minute" {
+  description = "WAF: requests per minute and client IP on all paths."
+  type        = number
+  default     = 600
+}
+
+# Feature flags: set to false when the subscription refuses a resource type.
+variable "enable_front_door" {
+  description = "Front Door Standard + WAF. Refused on \"Azure for Students\": \"Free Trial and Student account is forbidden for Azure Frontdoor resources\"."
+  type        = bool
+  default     = false
+}
+
+variable "gateway_allowed_cidrs" {
+  description = "Only when enable_front_door = false: name => CIDR range that can call the gateway (for example the ranges of another edge). Empty = the gateway accepts all sources (HTTPS only)."
+  type        = map(string)
+  default     = {}
+}
+
+variable "enable_email" {
+  type    = bool
+  default = true
+}
+
+variable "email_data_location" {
+  type    = string
+  default = "Europe"
+}
+
+variable "enable_budget" {
+  type    = bool
+  default = true
+}
+
+variable "enable_function_vnet_integration" {
+  description = "VNet integration of the gateway function app with snet-func."
+  type        = bool
+  default     = true
+}
+
+variable "function_max_instances" {
+  description = "Cost guard: maximum instances of each Flex Consumption app."
+  type        = number
+  default     = 4
+}
