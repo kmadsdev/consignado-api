@@ -14,6 +14,7 @@ Read in English: [README.md](README.md)
 
 O mesmo jar roda em pods no AKS e dentro de uma Azure Function, atrás de um gateway em Java e de uma borda na Cloudflare, em <https://consignado.kmads.dev>.
 O cluster AKS fica parado por padrão; um usuário autenticado o liga por uma janela de acesso de 15 minutos.
+No ar desde 2026-11-17. Medido pela borda: host serverless com 18,6 a 18,9 s a frio e 0,25 a 0,9 s a quente; host Kubernetes com cerca de 0,76 s a quente. A partida de um cluster parado não estava verificada quando este texto foi escrito.
 
 - Comece aqui: [docs/platform/README.md](docs/platform/README.md) (o que está no ar e o que não foi verificado; em inglês)
 - [Diagramas de arquitetura](docs/platform/architecture.md) · [Decisões](docs/platform/decisions.md) · [Runbook](docs/platform/operations.md)
@@ -43,27 +44,27 @@ Fiquei no Spring Boot 3.5 em vez do 4.x nesta primeira versão porque é a linha
 
 ```mermaid
 flowchart LR
-    client([cliente HTTP])
+    client(["cliente HTTP"])
 
-    subgraph app[consignado-api]
-        filter[CorrelationIdFilter]
-        api[api<br/>controllers, validação,<br/>problem details]
-        application[application<br/>casos de uso, read models]
-        domain[domain<br/>Cpf, PriceAmortization,<br/>MarginPolicy, ContractStatus]
-        persistence[persistence<br/>entidades JPA, repositórios]
-        outbox[outbox<br/>writer, relay,<br/>porta EventPublisher]
-        observability[observability<br/>métricas, logs JSON]
+    subgraph app["consignado-api"]
+        filter["CorrelationIdFilter"]
+        api["api<br/>controllers, validação,<br/>problem details"]
+        application["application<br/>casos de uso, read models"]
+        domain["domain<br/>Cpf, PriceAmortization,<br/>MarginPolicy, ContractStatus"]
+        persistence["persistence<br/>entidades JPA, repositórios"]
+        outbox["outbox<br/>writer, relay,<br/>porta EventPublisher"]
+        observability["observability<br/>métricas, logs JSON"]
     end
 
-    db[(PostgreSQL)]
-    channel[[canal de mensagens<br/>hoje: adapter de log]]
+    db[("PostgreSQL")]
+    channel[["canal de mensagens<br/>hoje: adapter de log"]]
 
     client --> filter --> api --> application
     application --> domain
     application --> persistence --> db
     application --> outbox
-    outbox -->|mesma transação| db
-    outbox -->|relay a cada 2 s| channel
+    outbox -->|"mesma transação"| db
+    outbox -->|"relay a cada 2 s"| channel
     application --> observability
 ```
 
@@ -122,9 +123,9 @@ Configuração por variável de ambiente: `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`
 
 ## Implantação
 
-`deploy/k8s` tem os manifests do Kubernetes e `deploy/render.sh` preenche os `${VAR}` deles (`IMAGE`, `APP_CLIENT_ID`, `TENANT_ID`, `KV`, `PG_HOST`, `PG_DB`, `PG_ADMIN`; nenhum é segredo). O Service é um load balancer interno do Azure com o IP privado fixo `10.10.3.200`, então a API não tem endereço público. A senha do banco vem do Key Vault via workload identity e o driver Secrets Store CSI.
+`deploy/k8s` tem os manifests do Kubernetes e `deploy/render.sh` preenche os `${VAR}` deles (`IMAGE`, `APP_CLIENT_ID`, `TENANT_ID`, `KV`, `PG_HOST`, `PG_DB`, `PG_ADMIN`; nenhum é segredo). O Service é um load balancer interno do Azure com um endereço privado fixo (`deploy/k8s/50-service.yaml`), então a API não tem endereço público. A senha do banco vem do Key Vault via workload identity e o driver Secrets Store CSI.
 
-O job `deploy` em `.github/workflows/ci.yml` roda a cada push na `main`: login OIDC, imagem no registry, liga o cluster se ele estiver parado, `kubelogin` (Entra ID com Azure RBAC, sem conta local), apply, rollout, smoke test de dentro do cluster e checagem do IP do load balancer. Ele nunca desliga o cluster; quem desliga é o timer do gateway. Os motivos estão na [ADR 0007](docs/adr/0007-two-hosts-one-api.md).
+O job `deploy` em `.github/workflows/ci.yml` roda a cada push na `main`: login OIDC, imagem no registry, liga o cluster se ele estiver parado, `kubelogin` (Entra ID com Azure RBAC, sem conta local), apply, rollout, smoke test de dentro do cluster e checagem do IP do load balancer. Ele nunca desliga o cluster; quem desliga é o timer do gateway. A imagem é construída com a imagem oficial do Maven, porque o download do Maven wrapper falhou nos runners. O job só tem permissão no namespace `consignado`; o admin do cluster cria o namespace uma vez com `WITH_NAMESPACE=1 ./deploy/render.sh | kubectl apply -f -`. Os motivos estão na [ADR 0007](docs/adr/0007-two-hosts-one-api.md).
 
 ## Exemplos de uso
 

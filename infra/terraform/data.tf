@@ -61,8 +61,9 @@ resource "azurerm_key_vault" "main" {
   sku_name                   = "standard"
   rbac_authorization_enabled = true
   soft_delete_retention_days = 7
-  purge_protection_enabled   = false
-  tags                       = local.tags
+  # Security review L6 (2026-11-17). Cannot be turned off again: a deleted vault or secret stays for 7 days.
+  purge_protection_enabled = true
+  tags                     = local.tags
 }
 
 # The secrets `apifn-host-key` and `turnstile-secret` are set by the integrator.
@@ -154,6 +155,30 @@ resource "azurerm_storage_container" "app" {
 
   name                  = each.key
   storage_account_id    = azurerm_storage_account.app.id
+  container_access_type = "private"
+}
+
+# ---------- Storage: API host only (security review M4, 2026-11-17) ----------
+# Host storage (AzureWebJobsStorage) and deployment package of the API host. The API host identity has no role on
+# stconsigapp* any more, so it cannot overwrite the gateway package or read the gateway tables.
+
+resource "azurerm_storage_account" "apihost" {
+  name                            = "stconsigapifn${var.suffix}"
+  resource_group_name             = local.rg_name
+  location                        = local.location
+  account_tier                    = "Standard"
+  account_replication_type        = "LRS"
+  account_kind                    = "StorageV2"
+  min_tls_version                 = "TLS1_2"
+  https_traffic_only_enabled      = true
+  allow_nested_items_to_be_public = false
+  shared_access_key_enabled       = false
+  tags                            = local.tags
+}
+
+resource "azurerm_storage_container" "apihost_deploy" {
+  name                  = "deploy-api"
+  storage_account_id    = azurerm_storage_account.apihost.id
   container_access_type = "private"
 }
 
