@@ -15,7 +15,7 @@ That leaves three questions for this API. Who checks the caller? What may a gues
 
 **The API has no login of its own. It trusts the network.** Only the gateway can open a connection to it:
 
-- On AKS the Service is an internal Azure load balancer with the fixed private IP `10.10.3.200` (`deploy/k8s/50-service.yaml`). It has no public address and no `loadBalancerSourceRanges`; the old `ALLOWED_CIDR` rule is gone.
+- On AKS the Service is an internal Azure load balancer with a fixed private address (`deploy/k8s/50-service.yaml`). It has no public address and no `loadBalancerSourceRanges`; the old `ALLOWED_CIDR` rule is gone.
 - The function host accepts inbound traffic only from the gateway's subnet.
 
 Authentication, sessions, quotas and the per-request trace live in the gateway. The API stays what ADR 0001 to 0006 describe: business rules, storage and events. It does not parse a token and does not know who the user is. The gateway sends `X-Consignado-User`; the API does not read it today.

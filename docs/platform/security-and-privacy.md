@@ -13,9 +13,9 @@ Back to the [entry page](README.md).
 |---|---|
 | Traffic in clear text | The Worker redirects HTTP to HTTPS and sets HSTS. Cloudflare holds the TLS certificates of both host names. |
 | Script injection or framing of the site | The Worker sets a content security policy (own origin, Turnstile and the Entra ID sign-in only), `X-Frame-Options: DENY`, `nosniff` and a strict referrer policy. |
-| Large or unusual requests to the API | The Worker accepts only `GET`, `POST`, `PUT` and `PATCH` on `/api`, refuses a declared body above 64 KB, forwards five request headers and drops all others. It removes cookies from API answers. |
+| Large or unusual requests to the API | A zone rule refuses other methods before the Worker runs (verified: a `DELETE` gets 403). The Worker accepts only `GET`, `POST`, `PUT` and `PATCH` on `/api`, refuses a declared body above 64 KB, forwards six request headers and drops all others. It removes cookies from API answers. |
 | Cached private data | `/api` answers are never cached (`no-store`). |
-| Volumetric attack | Cloudflare network-level protection. Which rate-limit and firewall rules are configured in the zone is not recorded in the reports: not verified. |
+| Volumetric attack and scripts | Cloudflare network-level protection. Zone rules scoped to the two host names: a rate limit of 40 requests per 10 seconds per IP address on `/api/`, and a managed challenge for non-browser clients on `/api/contact` and `/api/me/profile`. |
 
 ### Gateway
 
@@ -24,8 +24,8 @@ Back to the [entry page](README.md).
 | A call around the edge, direct to the function app | The function app accepts only Cloudflare address ranges (default deny; verified: 403 from another address). The gateway also requires the edge key, compared in constant time; a refusal is a 403 with no detail and no work done. |
 | A forged client address | The gateway reads the client address only from the header that Cloudflare sets, and only after the edge key matched. |
 | A direct call to an API host | The API host function accepts only the gateway subnet (verified: 403) and needs a host key. The AKS Service has only a private address. |
-| Path or method tricks through the proxy | Only paths under `api/v1/`, only `GET`, `POST`, `PATCH`, bodies up to 64 KB, an allow-list of five request headers. `Authorization` and cookies never go upstream. |
-| Information in error messages | Errors are `{code, message}` with no stack trace and no internal name. Logs hold exception class names, not messages. |
+| Path or method tricks through the proxy | Only paths under `api/v1/`, only `GET`, `POST`, `PATCH`, bodies up to 64 KB, an allow-list of six request headers (`accept`, `accept-language`, `content-type`, `idempotency-key`, `if-none-match`, `x-request-id`). `Authorization` and cookies never go upstream. Verified live: `PUT` gets 405, a path outside `api/v1/` gets 404. |
+| Information in error messages | Errors are `{code, message}` with no stack trace and no internal name. Logs hold the exception class and message, cut to 300 characters; they never go to the caller. |
 | The gateway damages the cluster | Its Azure role allows read, start and stop only. The code has no delete or update call. |
 
 ### Tokens
@@ -44,7 +44,7 @@ Back to the [entry page](README.md).
 |---|---|
 | One person uses the cluster without limit | 3 windows of 15 minutes per account. A window is counted when it opens. |
 | Many accounts for one person | Same device fingerprint: the account is held for approval. Same IP only: a flag. A filter, not a proof: a new browser or a VPN passes it. |
-| Scripts on the forms | Turnstile token on the contact form and the profile form, verified by the gateway. If no secret is configured, the check is skipped and logged. |
+| Scripts on the forms | Turnstile token on the contact form and the profile form, verified by the gateway (verified live). If no secret is configured, the check is skipped and logged. |
 | A loop from one user | 5 session requests and 3 contact requests per user in 10 minutes. In memory per instance. |
 | Start and stop cycles that Azure refuses | 15-minute cool-down after each stop. |
 | The budget is spent | Alerts at 50, 80, 100 percent. At 100 percent the engine pauses and the cluster stops. Not a hard cap: see [ADR 0012](../adr/0012-budget-guard-and-abuse-limits.md). |
@@ -103,14 +103,15 @@ These are stated on purpose. None is hidden by the design.
 1. **No managed WAF rule set.** The edge is on the Cloudflare free plan. Front Door, with its WAF, was refused by the subscription. The gateway's own input rules are the main filter.
 2. **The database has a public endpoint.** The firewall rule admits every address of Azure, in any tenant. The password and TLS are the real controls. This was the owner's choice for cost.
 3. **Guests are in the same tenant as the subscription.** A separate External ID tenant was refused. Guest permissions are at the most restricted level, but the separation is weaker than a tenant of their own.
-4. **The privacy notice was not reviewed by a lawyer.** The notice also names Cloudflare for "DNS and the anti-bot check" only; since the edge moved to Cloudflare, all traffic passes through it, and the notice should say so.
+4. **The privacy notice was not reviewed by a lawyer.** It names Cloudflare as the edge for all traffic.
 5. **Audit rows are not deleted after 90 days.** The notice promises 90 days. The gateway deletes no row. A storage rule or a job must be added. The same is true for the "12 months without use" rule of accounts.
 6. **The API trusts the network.** It has no authentication of its own ([ADR 0007](../adr/0007-two-hosts-one-api.md)).
 7. **One shared secret with the edge.** The edge key is copied by hand and rotated by hand.
 8. **Limits in memory.** The per-user guard and the secret cache are per instance. The engine row has no optimistic lock.
 9. **The bot check fails open** when its secret is not configured.
 10. **No scheduled rebuild and no vulnerability scan** of the serverless package, which carries its own Java runtime.
-11. **Much of the live behaviour was not verified** when this page was written. The list is in the status table of the [entry page](README.md).
+11. **The Microsoft sign-up pages show the tenant, not the product.** The permission page and the code mail carry the tenant's display name and domain. These are tenant settings.
+12. **Some live behaviour was not verified** when this page was written: the cold start from a stopped cluster, the admin pages with a real token, the owner email, the duplicate-account hold with two real accounts, the budget pause from a real alert. The list is in the status table of the [entry page](README.md).
 
 ## Example
 

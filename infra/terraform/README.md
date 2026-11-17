@@ -75,6 +75,7 @@ Notes for operation:
   3. prove it: `POST https://consignado.kmads.dev/api/fn/api/v1/simulations/preview` answers 200 with an `installment`.
 - **Feature flags.** `enable_front_door` (default `false`), `enable_email`, `enable_budget`, `enable_function_vnet_integration` switch a part that the subscription refuses.
 - **Cloudflare ranges.** `gateway_allowed_cidrs` holds the list of `https://www.cloudflare.com/ips-v4` of 2026-11-17. When Cloudflare changes the list, change the variable and apply.
+- **Tables** are made by an ARM deployment (`consignado-tables`): `azurerm_storage_table` needs the account key, and the account accepts none.
 - The subscription policy allows only `belgiumcentral`, `northcentralus`, `chilecentral`, `mexicocentral`, `southafricanorth`.
 
 ## Files
@@ -98,8 +99,8 @@ Notes for operation:
 | Thing | Name | Region | Notes |
 |---|---|---|---|
 | Resource group | `rg-consignado` | belgiumcentral | Tags `project=consignado`, `managed-by=terraform` on every resource. |
-| Virtual network | `vnet-consignado` 10.10.0.0/16 | belgiumcentral | `snet-aks` 10.10.0.0/22; `snet-func` 10.10.8.0/24 (delegation `Microsoft.App/environments`, service endpoint `Microsoft.Web`). |
-| AKS | `aks-consignado` | belgiumcentral | Free tier, 1 x `Standard_D2as_v4`, Azure CNI overlay (pods 10.244.0.0/16, services 10.0.0.0/16), OIDC issuer, workload identity, Key Vault CSI add-on, Entra ID + Azure RBAC, local accounts off, managed OS disk 32 GB. |
+| Virtual network | `vnet-consignado` | belgiumcentral | Subnets `snet-aks` and `snet-func` (delegation `Microsoft.App/environments`, service endpoint `Microsoft.Web`). Address ranges: `network.tf`. |
+| AKS | `aks-consignado` | belgiumcentral | Free tier, 1 x `Standard_D2as_v4`, Azure CNI overlay (pod and service ranges in `aks.tf`), OIDC issuer, workload identity, Key Vault CSI add-on, Entra ID + Azure RBAC, local accounts off, managed OS disk 32 GB. |
 | Registry | `crconsignadokm01` | belgiumcentral | Basic, admin user off. |
 | Key Vault | `kv-consig-km01` | belgiumcentral | RBAC mode, soft delete 7 days, purge protection on (since 2026-11-17; it cannot be turned off). Secrets `db-password` and `edge-key` (Terraform). `apifn-host-key`, `turnstile-secret`: the integrator. |
 | PostgreSQL | `psql-consignado-km01` | northcentralus (`pg_location`) | Flexible server `B_Standard_B1ms`, v16, 32 GB, database `consignado`, admin `pgadmin`, public endpoint + rule `AllowAllAzureServices`. |
@@ -136,7 +137,8 @@ Notes for operation:
 | `id-consignado-apifn` | Storage Blob Data Owner (host and deployment storage) | `stconsigapifnkm01` only (no role on `stconsigappkm01`) |
 | API host, system-assigned identity | Key Vault Secrets User (Key Vault reference of `DB_PASSWORD`) | Key Vault |
 | `id-consignado-github` | AcrPush | registry |
-| `id-consignado-github` | Azure Kubernetes Service Cluster User Role, Azure Kubernetes Service RBAC Writer, Consignado Engine Operator | cluster |
+| `id-consignado-github` | Azure Kubernetes Service Cluster User Role, Consignado Engine Operator | cluster |
+| `id-consignado-github` | Azure Kubernetes Service RBAC Admin | namespace `consignado` only (the cluster admin creates the namespace once) |
 | `id-consignado-github` | Website Contributor | both function apps |
 | `id-consignado-github` | Storage Blob Data Contributor | `stconsigappkm01`, `stconsigapifnkm01`, `stconsigwebkm01` |
 | `id-consignado-github` | CDN Endpoint Contributor (purge) | Front Door profile: only when `enable_front_door = true` (not assigned now) |
@@ -186,18 +188,20 @@ With Front Door Standard (+35.00) the fixed cost would be about 66 to 70: higher
   Private Link origins, but costs US$330 per month. Standard supports custom WAF rules only; that is why the WAF has only
   rate-limit rules. The gateway accepts only the `AzureFrontDoor.Backend` service tag with the `X-Azure-FDID` header of this
   profile, so a different Front Door profile cannot reach it.
-- **Internal load balancer.** The AKS service has no public IP. Kubernetes creates an internal load balancer with the fixed IP
-  `10.10.3.200` in `snet-aks`; only the VNet can reach it, and the gateway is in the VNet (`snet-func`). The cluster identity has
+- **Internal load balancer.** The AKS service has no public IP. Kubernetes creates an internal load balancer with a fixed
+  private address in `snet-aks` (set in `deploy/k8s` and in the gateway setting `AKS_INTERNAL_URL`); only the VNet can reach it, and the gateway is in the VNet (`snet-func`). The cluster identity has
   `Network Contributor` on `snet-aks` for this. Terraform does not create the load balancer: the Service manifest in `deploy/k8s` does.
 - **Database with a public endpoint and the Azure-services rule.** Owner's decision for cost. A private endpoint costs about
   US$7 per month plus a private DNS zone, and VNet injection of the server makes the API host function app need VNet integration
   and a cross-region link (the server is in `northcentralus`). Protection that stays: TLS is required, the password has 28
-  random characters and is only in Key Vault, and the firewall rule 0.0.0.0 admits only addresses of Azure, not the internet.
+  random characters and is only in Key Vault, and the firewall rule `AllowAllAzureServices` admits only addresses of Azure, not the internet.
   The weak point: any Azure tenant can reach the port, so the password is the real control.
 - **Azure RBAC for Kubernetes.** One system of permissions (Azure role assignments, in this Terraform) for people, the
   gateway and CI. No kubeconfig with a client certificate exists (`local_account_disabled = true`), so nothing can leak
-  from a file. Each caller gets a token from Entra ID: the gateway reads (`RBAC Reader`), CI deploys (`RBAC Writer`),
-  the owner is `RBAC Cluster Admin`. `kubectl` needs `kubelogin`.
+  from a file. Each caller gets a token from Entra ID: the gateway reads (`RBAC Reader`; it cannot list nodes, so it reads pods),
+  CI deploys (`RBAC Admin` on the namespace `consignado` only: `RBAC Writer` cannot change a `SecretProviderClass`),
+  the owner is `RBAC Cluster Admin` and creates the namespace once (`WITH_NAMESPACE=1 ./deploy/render.sh | kubectl apply -f -`).
+  `kubectl` needs `kubelogin`.
 - **OS disk of the node: managed, 32 GB.** An ephemeral OS disk (48 GB in the 50 GiB cache of `Standard_D2as_v4`) has no
   disk cost. The Microsoft documentation for cluster stop/start (`learn.microsoft.com/azure/aks/start-stop-cluster`, read
   2026-11-17) does not list ephemeral OS disks as a limit, but it also does not say that they are supported; only the
