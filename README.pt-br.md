@@ -10,6 +10,15 @@ Read in English: [README.md](README.md)
 
 *Execução local do passo a passo do README.*
 
+## Plataforma: esta API roda ao vivo em dois hosts na Azure
+
+O mesmo jar roda em pods no AKS e dentro de uma Azure Function, atrás de um gateway em Java e de uma borda na Cloudflare, em <https://consignado.kmads.dev>.
+O cluster AKS fica parado por padrão; um usuário autenticado o liga por uma janela de acesso de 15 minutos.
+
+- Comece aqui: [docs/platform/README.md](docs/platform/README.md) (o que está no ar e o que não foi verificado; em inglês)
+- [Diagramas de arquitetura](docs/platform/architecture.md) · [Decisões](docs/platform/decisions.md) · [Runbook](docs/platform/operations.md)
+- [Segurança e privacidade](docs/platform/security-and-privacy.md) · [Decisões de produto](docs/platform/business.md) · ADRs 0008 a 0012 em [docs/adr](docs/adr)
+
 ## O que ele faz
 
 No consignado, a parcela é descontada direto da folha de pagamento. Por isso o convênio com o empregador limita quanto do salário líquido as parcelas podem comprometer (a margem consignável) e qual o prazo máximo. A API:

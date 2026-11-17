@@ -10,6 +10,15 @@ Leia em português: [README.pt-br.md](README.pt-br.md)
 
 *Local run of the README walkthrough.*
 
+## Platform: this API runs live on two Azure hosts
+
+The same jar runs as pods on AKS and inside an Azure Function, behind a Java gateway and a Cloudflare edge, at <https://consignado.kmads.dev>.
+The AKS cluster is stopped by default; a signed-in user starts it for a 15-minute access window.
+
+- Start here: [docs/platform/README.md](docs/platform/README.md) (what is live, what is not verified)
+- [Architecture diagrams](docs/platform/architecture.md) · [Decisions](docs/platform/decisions.md) · [Runbook](docs/platform/operations.md)
+- [Security and privacy](docs/platform/security-and-privacy.md) · [Product decisions](docs/platform/business.md) · ADRs 0008 to 0012 in [docs/adr](docs/adr)
+
 ## What it does
 
 In a consignado loan, the installment is deducted from the borrower's paycheck, so the employer agreement (convênio) caps how much of the net salary installments may take (the consignable margin) and how long the loan may run. This API:
