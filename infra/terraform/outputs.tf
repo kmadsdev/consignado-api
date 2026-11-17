@@ -45,7 +45,7 @@ output "key_vault" {
     name         = azurerm_key_vault.main.name
     id           = azurerm_key_vault.main.id
     uri          = azurerm_key_vault.main.vault_uri
-    secret_names = ["db-password", "edge-key", "apifn-host-key", "turnstile-secret"]
+    secret_names = ["db-password", "edge-key", "hash-key", "apifn-host-key", "turnstile-secret"]
   }
 }
 

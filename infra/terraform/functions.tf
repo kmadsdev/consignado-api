@@ -93,7 +93,11 @@ resource "azurerm_function_app_flex_consumption" "gateway" {
   }
 
   app_settings = merge({
-    # Host storage with the identity (no connection string).
+    # Host storage with the identity (no connection string). Microsoft documentation, "identity-based
+    # connections": with AzureWebJobsStorage__accountName the setting AzureWebJobsStorage must not exist.
+    # The provider adds AzureWebJobsStorage with an account key by default; the storage account refuses
+    # shared keys, so the host got 403. The empty value removes the setting.
+    AzureWebJobsStorage              = ""
     AzureWebJobsStorage__accountName = azurerm_storage_account.app.name
     AzureWebJobsStorage__credential  = "managedidentity"
     AzureWebJobsStorage__clientId    = azurerm_user_assigned_identity.this["gw"].client_id
@@ -118,6 +122,11 @@ resource "azurerm_function_app_flex_consumption" "gateway" {
     AZURE_SUBSCRIPTION  = var.subscription_id
     AZURE_RESOURCEGROUP = local.rg_name
   }, local.email_settings)
+
+  # The provider does not read AzureWebJobsStorage back, so the empty value above would show a change in every plan.
+  lifecycle {
+    ignore_changes = [app_settings["AzureWebJobsStorage"]]
+  }
 }
 
 # ---------- API host (custom handler: the Spring Boot jar) ----------
@@ -162,6 +171,8 @@ resource "azurerm_function_app_flex_consumption" "api" {
   }
 
   app_settings = {
+    # Same rule as the gateway: no AzureWebJobsStorage setting beside the identity-based settings.
+    AzureWebJobsStorage              = ""
     AzureWebJobsStorage__accountName = azurerm_storage_account.app.name
     AzureWebJobsStorage__credential  = "managedidentity"
     AzureWebJobsStorage__clientId    = azurerm_user_assigned_identity.this["apifn"].client_id
@@ -170,5 +181,9 @@ resource "azurerm_function_app_flex_consumption" "api" {
     DB_URL          = "jdbc:postgresql://${azurerm_postgresql_flexible_server.main.fqdn}:5432/${local.db_name}?sslmode=require"
     DB_USERNAME     = local.db_username
     DB_PASSWORD     = "@Microsoft.KeyVault(SecretUri=${azurerm_key_vault_secret.db_password.versionless_id})"
+  }
+
+  lifecycle {
+    ignore_changes = [app_settings["AzureWebJobsStorage"]]
   }
 }

@@ -93,6 +93,24 @@ resource "azurerm_key_vault_secret" "edge_key" {
   depends_on = [azurerm_role_assignment.user_kv_secrets_officer]
 }
 
+# Key of the HMAC-SHA256 that the gateway uses for IP addresses and device fingerprints.
+# The gateway identity can only read Key Vault, so Terraform makes the key. Never an output.
+# A new value makes every stored hash useless for the duplicate check: do not rotate it without a reason.
+resource "random_password" "hash_key" {
+  length  = 48
+  special = false
+}
+
+resource "azurerm_key_vault_secret" "hash_key" {
+  name         = "hash-key"
+  key_vault_id = azurerm_key_vault.main.id
+  value        = random_password.hash_key.result
+  content_type = "HMAC key: gateway hashes of IP and fingerprint"
+  tags         = local.tags
+
+  depends_on = [azurerm_role_assignment.user_kv_secrets_officer]
+}
+
 # ---------- Storage: static site ----------
 
 resource "azurerm_storage_account" "web" {
