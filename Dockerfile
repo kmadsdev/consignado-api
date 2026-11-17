@@ -1,17 +1,20 @@
 # syntax=docker/dockerfile:1.7
 
 # ---- build ----------------------------------------------------------------
-FROM eclipse-temurin:21-jdk-noble AS build
+# The Maven image already holds Maven: the wrapper's download of Maven failed
+# again and again on CI runners ("wget: Failed to fetch"), and a build must not
+# depend on it. The version matches .mvn/wrapper/maven-wrapper.properties.
+FROM maven:3.9.11-eclipse-temurin-21-noble AS build
 WORKDIR /workspace
 
 # Dependencies first: this layer is reused while only the source changes.
 COPY .mvn/ .mvn/
 COPY mvnw pom.xml ./
-RUN --mount=type=cache,target=/root/.m2 ./mvnw -B -ntp -q dependency:go-offline
+RUN --mount=type=cache,target=/root/.m2 mvn -B -ntp -q dependency:go-offline
 
 COPY src/ src/
 # Tests run in CI before this image is built; the image build only packages.
-RUN --mount=type=cache,target=/root/.m2 ./mvnw -B -ntp -q package -DskipTests \
+RUN --mount=type=cache,target=/root/.m2 mvn -B -ntp -q package -DskipTests \
     && java -Djarmode=tools -jar target/consignado-api.jar extract --layers --launcher --destination target/extracted
 
 # ---- runtime --------------------------------------------------------------
