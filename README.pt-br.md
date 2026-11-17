@@ -2,7 +2,7 @@
 
 API REST de crédito consignado: convênios, clientes, simulação com tabela Price e o ciclo de vida do contrato até a quitação.
 
-É um projeto de estudo que fiz para praticar design de backend em cima de um produto bancário de verdade. Não tem usuários e não roda em produção.
+É um projeto de estudo que fiz para praticar design de backend em cima de um produto bancário de verdade. Não tem clientes reais. Uma demonstração pública dele roda na Azure só com dados sintéticos (veja a seção Plataforma).
 
 Read in English: [README.md](README.md)
 
