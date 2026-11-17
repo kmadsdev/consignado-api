@@ -18,7 +18,7 @@ No ar desde 2026-11-17. Medido pela borda: host serverless com 18,6 a 18,9 s a f
 
 - Comece aqui: [docs/platform/README.md](docs/platform/README.md) (o que está no ar e o que não foi verificado; em inglês)
 - [Diagramas de arquitetura](docs/platform/architecture.md) · [Decisões](docs/platform/decisions.md) · [Runbook](docs/platform/operations.md)
-- [Segurança e privacidade](docs/platform/security-and-privacy.md) · [Decisões de produto](docs/platform/business.md) · ADRs 0008 a 0012 em [docs/adr](docs/adr)
+- [Segurança e privacidade](docs/platform/security-and-privacy.md) · [Decisões de produto](docs/platform/business.md) · ADRs 0008 a 0013 em [docs/adr](docs/adr)
 
 ## O que ele faz
 
@@ -251,6 +251,17 @@ Os números são os do exemplo 3, porque o caminho de código é o mesmo (`Price
 
 Todo erro sai como `application/problem+json` (RFC 9457, que substituiu a RFC 7807), com um `code` estável e o `correlationId` da requisição. A tabela de códigos está no [README em inglês](README.md#errors).
 
+## Headers de tempo por requisição
+
+Toda resposta fora de `/actuator` diz o que a requisição fez ([ADR 0013](docs/adr/0013-per-request-timing-headers.md), em inglês):
+
+```
+Server-Timing: app;dur=6.6, db;dur=2.4;desc="3 statements"
+X-Consignado-Timing: {"instance":"894a9bcc0d0c","appMs":6.6,"db":{"ms":2.4,"statements":3,"select":2,"insert":1,"update":0,"delete":0,"other":0,"connectionMs":0.0,"transactions":1}}
+```
+
+`appMs` é o tempo dentro da aplicação, `db.ms` a soma dos tempos dos comandos JDBC, `connectionMs` a espera por uma conexão do pool. A prévia de empréstimo sempre responde `"db":null` e não tem a entrada `db` no `Server-Timing`: ela não roda nenhum comando. Só números saem da API: nada de SQL, de parâmetro ou de dado de entidade. Os mesmos números vão para a linha de log da requisição e para as métricas `consignado.db.request.statements` e `consignado.db.request.time`. O gateway usa o header para desenhar as etapas `app` e `database` de cada requisição.
+
 ## Decisões de design
 
 | ADR | Decisão |
@@ -262,18 +273,19 @@ Todo erro sai como `application/problem+json` (RFC 9457, que substituiu a RFC 78
 | [0005](docs/adr/0005-transactional-outbox.md) | Transactional outbox, relay com `SKIP LOCKED`, porta `EventPublisher`; onde um adapter de broker entra |
 | [0006](docs/adr/0006-observability.md) | Correlation id, logs JSON, readiness separado de liveness, métricas de negócio, CPF fora de log e de URL |
 | [0007](docs/adr/0007-two-hosts-one-api.md) | Dois hosts (AKS e uma function) rodam o mesmo jar no mesmo banco; a API não tem login, só o gateway chega nela; prévia sem estado para visitantes; sem delete e uma única alteração de renda protegida |
+| [0013](docs/adr/0013-per-request-timing-headers.md) | `Server-Timing` e `X-Consignado-Timing` em toda resposta: tempo da aplicação e trabalho JDBC por tipo, via datasource-proxy; só números, nunca SQL ou dados |
 
 As ADRs estão em inglês.
 
 ## Testes
 
-- **Unitários** do domínio: dígito verificador do CPF, cronograma conferido à mão, empate do HALF_EVEN, taxa zero, prazos de até 420 meses, arredondamento da margem, a trava da alteração de renda, os 49 pares de status e os números da prévia.
+- **Unitários** do domínio: dígito verificador do CPF, cronograma conferido à mão, empate do HALF_EVEN, taxa zero, prazos de até 420 meses, arredondamento da margem, a trava da alteração de renda, os 49 pares de status, os números da prévia e as strings exatas dos headers de tempo.
 - **Slice web** (`@WebMvcTest`): status, headers, corpo dos erros, validação, limites de paginação, nada vazando num 500. `SimulationPreviewTest` roda a prévia de verdade num contexto sem `DataSource`, sem JPA e sem repositório.
 - **Repositório** (`@DataJpaTest` com PostgreSQL de verdade): migrations, constraints, lock otimista, soma da margem, paginação.
-- **Integração** (app inteira + PostgreSQL via HTTP): ciclo completo, criação idempotente concorrente, aprovações concorrentes, corte de renda concorrendo com uma aprovação, listagens da mais nova para a mais antiga, prévia igual à simulação gravada, ordem e retry do outbox, probes e métricas.
+- **Integração** (app inteira + PostgreSQL via HTTP): ciclo completo, criação idempotente concorrente, aprovações concorrentes, corte de renda concorrendo com uma aprovação, listagens da mais nova para a mais antiga, prévia igual à simulação gravada, ordem e retry do outbox, probes e métricas, headers de tempo em 201/200/404/422/400 com `"db":null` na prévia.
 - **Arquitetura** (ArchUnit): regras de camada e nenhuma dependência de armazenamento na prévia do visitante.
 
-Os CPFs dos testes são gerados na hora com dígitos válidos; não existe CPF real no repositório. O build falha abaixo de 80% de cobertura de linha (JaCoCo); a última execução ficou em torno de 96%.
+Os CPFs dos testes são gerados na hora com dígitos válidos; não existe CPF real no repositório. O build falha abaixo de 80% de cobertura de linha (JaCoCo); a última execução ficou em torno de 95%.
 
 ## O que não foi feito
 

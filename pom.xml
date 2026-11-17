@@ -23,6 +23,7 @@
         <archunit.version>1.4.1</archunit.version>
         <jacoco.version>0.8.13</jacoco.version>
         <jacoco.minimum.line.coverage>0.80</jacoco.minimum.line.coverage>
+        <datasource-proxy.version>1.11.1</datasource-proxy.version>
     </properties>
 
     <dependencies>
@@ -59,6 +60,12 @@
             <groupId>io.micrometer</groupId>
             <artifactId>micrometer-registry-prometheus</artifactId>
             <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <!-- Per-request JDBC numbers for the timing headers (docs/adr/0013). -->
+            <groupId>net.ttddyy</groupId>
+            <artifactId>datasource-proxy</artifactId>
+            <version>${datasource-proxy.version}</version>
         </dependency>
         <dependency>
             <groupId>org.springdoc</groupId>
