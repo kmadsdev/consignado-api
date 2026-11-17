@@ -28,6 +28,34 @@ class MarginPolicyTest {
                 .satisfies(value -> assertThat(value.scale()).isEqualTo(2));
     }
 
+    @ParameterizedTest(name = "salary={0}, margin={1}% -> limit={2}")
+    @CsvSource({
+            "5000.00, 35, 1750.00",
+            "3333.33, 35, 1166.66",
+            "2619.43, 35, 916.80",
+            "2619.42, 35, 916.79",
+    })
+    void theMarginLimitIsTheCapRoundedDown(String salary, String percent, String expected) {
+        assertThat(MarginPolicy.marginLimit(bd(salary), bd(percent)))
+                .isEqualByComparingTo(expected)
+                .satisfies(value -> assertThat(value.scale()).isEqualTo(2));
+    }
+
+    @Test
+    void aLimitEqualToTheCommittedInstallmentsStillCoversThem() {
+        assertThatCode(() -> MarginPolicy.requireCovers(bd("916.80"), bd("916.80"))).doesNotThrowAnyException();
+    }
+
+    @Test
+    void aLimitBelowTheCommittedInstallmentsIsRejectedWithBothNumbers() {
+        assertThatThrownBy(() -> MarginPolicy.requireCovers(bd("916.79"), bd("916.80")))
+                .isInstanceOfSatisfying(IncomeBelowCommittedMarginException.class, e -> {
+                    assertThat(e.code()).isEqualTo("income-below-committed-margin");
+                    assertThat(e.marginLimit()).isEqualByComparingTo("916.79");
+                    assertThat(e.committedInstallments()).isEqualByComparingTo("916.80");
+                });
+    }
+
     @Test
     void treatsNullCommittedAsZero() {
         assertThat(MarginPolicy.availableMargin(bd("1000.00"), bd("30"), null)).isEqualByComparingTo("300.00");

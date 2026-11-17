@@ -5,8 +5,15 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.fasterxml.jackson.databind.JsonNode;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.actuate.observability.AutoConfigureObservability;
@@ -106,6 +113,11 @@ public abstract class ApiTestBase {
         return exchange(HttpMethod.POST, path, body, new HttpHeaders());
     }
 
+    protected ResponseEntity<JsonNode> changeIncome(UUID customerId, String monthlyIncome) {
+        return exchange(HttpMethod.PATCH, "/api/v1/customers/" + customerId + "/income",
+                Map.of("monthlyIncome", new BigDecimal(monthlyIncome)), new HttpHeaders());
+    }
+
     protected ResponseEntity<JsonNode> get(String path) {
         return rest.getForEntity(path, JsonNode.class);
     }
@@ -121,5 +133,28 @@ public abstract class ApiTestBase {
 
     protected static BigDecimal decimal(JsonNode node) {
         return new BigDecimal(node.asText());
+    }
+
+    /** Starts every call at the same moment and returns the results in the order of the calls. */
+    protected static <T> List<T> runConcurrently(List<Callable<T>> calls) throws Exception {
+        ExecutorService pool = Executors.newFixedThreadPool(calls.size());
+        try {
+            CountDownLatch start = new CountDownLatch(1);
+            List<Future<T>> futures = new ArrayList<>();
+            for (Callable<T> call : calls) {
+                futures.add(pool.submit(() -> {
+                    start.await();
+                    return call.call();
+                }));
+            }
+            start.countDown();
+            List<T> results = new ArrayList<>();
+            for (Future<T> future : futures) {
+                results.add(future.get());
+            }
+            return results;
+        } finally {
+            pool.shutdownNow();
+        }
     }
 }

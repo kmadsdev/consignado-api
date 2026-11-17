@@ -13,6 +13,7 @@ import jakarta.validation.constraints.Min;
 import java.util.UUID;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -58,6 +59,14 @@ class CustomerController {
                                 @RequestParam(defaultValue = Paging.DEFAULT_SIZE) @Min(1) @Max(Paging.MAX_SIZE)
                                 int size) {
         return service.list(page, size);
+    }
+
+    @PatchMapping("/{id}/income")
+    @Operation(summary = "Change the net monthly income",
+            description = "The only update of a customer. Fails with 422 income-below-committed-margin when the "
+                    + "new margin limit is below the installments of APPROVED and ACTIVE contracts")
+    CustomerView changeIncome(@PathVariable UUID id, @Valid @RequestBody Requests.ChangeIncome body) {
+        return service.changeIncome(id, body.monthlyIncome());
     }
 
     @GetMapping("/{id}/margin")
