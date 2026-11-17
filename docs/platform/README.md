@@ -31,7 +31,7 @@ Both host names go to the same Worker.
 |---|---|---|
 | Guest | No token. | One API route: the stateless loan preview on the serverless host (`POST /api/fn/api/v1/simulations/preview`), and the public gateway routes (health, engine state, masked snapshot, contact form). Never the AKS host. Never the database. |
 | User | Microsoft Entra ID token. | The serverless host at all times. The AKS host only inside an own access window: 15 minutes, 3 windows per account. Reads all shared data. Writes only through the workflow endpoints. |
-| Admin | The owner's account. | All of the above with no window limit, plus `/admin`: users, sessions, engine state, budget, contact requests. |
+| Admin | The owner's account. | All of the above with no window limit, plus `/admin`: users, sessions, engine state, budget, contact requests. The admin is matched by the object id in the token. |
 
 ## Pages
 
@@ -44,31 +44,48 @@ Both host names go to the same Worker.
 | [business.md](business.md) | The product decisions: who it is for, the limits, the budget, what is not built. |
 | ADRs | [0008 gateway](../adr/0008-gateway-in-front-of-two-hosts.md), [0009 cold cluster](../adr/0009-cold-cluster-and-access-windows.md), [0010 Cloudflare edge](../adr/0010-cloudflare-edge-instead-of-front-door.md), [0011 sign-up](../adr/0011-sign-up-in-the-workforce-tenant.md), [0012 budget and abuse](../adr/0012-budget-guard-and-abuse-limits.md). ADR 0001 to 0007 are about the API itself. |
 
-## Status (2026-11-17, 06:00 UTC-3)
+## Status (2026-11-17, first day live)
 
-This table is taken from the reports and the state notes of the build. "Not verified" means: no report shows a live check. It does not mean "broken".
+The platform went live on 2026-11-17. This table holds what was checked live on that day, by whom and how.
+"Not verified" means that no live check exists. It does not mean "broken".
+Times are in the browser of the tester unless the row says otherwise.
 
 | Part | Status |
 |---|---|
-| Azure resources in `rg-consignado` (network, AKS, registry, Key Vault, PostgreSQL, storage, two function apps, identities, monitoring, email, budget) | **Live.** Created by Terraform. The last `terraform plan` showed no changes. |
-| Azure Front Door and its WAF | **Not created.** The subscription refused it. The edge is a Cloudflare Worker. |
-| Gateway function app accepts only Cloudflare address ranges | **Verified.** A direct call from another address got HTTP 403. |
-| API host function app accepts only the gateway subnet | **Verified.** A direct call got HTTP 403. |
-| Static site storage endpoint | **Verified.** It answered HTTP 200. |
-| PostgreSQL server ready; database password resolved from Key Vault by the API host | **Verified.** |
-| AKS settings: Azure RBAC on, local accounts off, workload identity on | **Verified.** |
-| Sign-up user flow with email one-time code, linked to the site's app registration | **Configured.** Read in the portal in the same session. No reload check. |
-| The Worker `consignado-edge` on `consignado.kmads.dev` | **Live.** It serves the static site from Blob Storage. |
-| The Worker on `cluster.consignado.kmads.dev` | Not verified. The certificate of this host name was still in validation at the last check. |
-| Gateway code | **Deployed, not working at the last check.** The deploy workflow was green, but the gateway answered HTTP 500. The cause was under investigation. |
-| API on the serverless host | Not verified. The first workflow run failed on a download error of the runner and was started again; the result is not in the sources. |
-| API on the AKS host behind the internal load balancer | Not verified. The first deploy job failed on the same download error and was started again; the result is not in the sources. |
-| Deploy workflows with GitHub OIDC login | The gateway workflow ran green. The other workflows: not verified. |
-| A full sign-up and sign-in from the site | Not verified. |
-| A full access window: start, ready, countdown, stop, cool-down | Not verified. |
-| Email to the owner; delivery of the budget alert; the budget webhook | Not verified. |
-| Cold-start and latency numbers on Azure | Not verified. The numbers in these pages were measured locally under emulation. |
-| Time that the cluster needs to start | Not verified. Not measured on this cluster. |
+| Azure resources in `rg-consignado` (network, AKS, registry, Key Vault, PostgreSQL, storage, two function apps, identities, monitoring, email, budget) | **Live.** Created by Terraform. The last full `terraform plan` showed no changes. |
+| Azure Front Door and its WAF | **Not created.** The subscription refused it: `Free Trial and Student account is forbidden for Azure Frontdoor resources`. |
+| Edge: Cloudflare Worker `consignado-edge` on `consignado.kmads.dev` and `cluster.consignado.kmads.dev` | **Live, verified.** Both host names answer with a valid certificate. The site and `/api/*` pass through the Worker. |
+| Cloudflare zone rules, scoped to the two host names | **Live.** A rate limit of 40 requests per 10 seconds per IP address on `/api/`; a method allow-list; a managed challenge for non-browser clients on `/api/contact` and `/api/me/profile`. Verified in the end-to-end test: a `DELETE` is refused at the edge with 403. |
+| Gateway function app accepts only Cloudflare address ranges plus the edge key | **Verified.** A direct call from another address gets 403. |
+| API host function app accepts only the gateway subnet | **Verified.** A direct call gets 403. |
+| Gateway through the edge | **Live, verified.** Health, engine state, masked snapshot, 401 without a token, guest preview. |
+| API on the serverless host | **Live, verified.** All operations through the site passed in the end-to-end test (9 calls, 0 failures). |
+| API on the AKS host behind the internal load balancer | **Live, verified.** Deployed by the CI job (OIDC, registry push, Azure RBAC, smoke test). All operations inside a real access window passed (10 calls, 0 failures). |
+| Deploy workflows | API (`ci.yml`, job `deploy`), gateway and site: green runs on 2026-11-17. API host workflow: both runs on 2026-11-17 ended with the deploy step marked failed (the zip was accepted, then the host key could not be fetched: the host storage fault of [lesson 6](operations.md#9-lessons-from-the-first-day)). The host serves live calls. A fully green run is not on record at the time of writing. |
+| Sign-up with an email one-time code, then sign-in | **Verified.** A real sign-up with a test mailbox passed: code mail in less than 5 s, then back on the site. |
+| Profile form with Turnstile | **Verified** in a visible browser. A headless browser is refused, as expected. |
+| Access rules | **Verified.** A user gets 403 on admin routes, 403 `no-session` on the AKS host without a ready window, 404 for another user's session, 405 for `PUT` on the proxy. |
+| Access window on a running cluster | **Verified** after a fix. The first window waited 14 min 44 s because of a gateway defect (see [Lessons](operations.md#9-lessons-from-the-first-day)). It became ready at the first observation after the fix was deployed. |
+| Automatic cluster stop after the last window | **Verified.** ARM accepted the stop (HTTP 202); the engine went to `stopping`, then `cooldown`; the cluster showed `Stopped` about 2 minutes later. A new window was refused with 409 `cooldown` until 15 minutes after the stop. |
+| Seed data in the database | **Done.** 4 agreements, 50 customers, 60 simulations, 30 contracts, all synthetic, made through the API by `deploy/seed/seed.sh` (branch `feat/seed`; not merged into `main` at the time of writing). The guest snapshot shows the rows masked. |
+| Real cold start of the AKS cluster from `Stopped` | **Not verified at the time of writing.** A test is in progress. <!-- integrator: update this row --> |
+| Admin pages (`/admin`) with a real admin token | **Not verified at the time of writing.** A test is in progress. <!-- integrator: update this row --> |
+| Email to the owner when a new user signs up | Not verified. |
+| Duplicate-account hold with two real accounts | Not verified. The rule is tested with fakes only. |
+| Budget pause from a real budget alert | Not verified. The webhook is attached to the action group (see [operations](operations.md#6-when-the-budget-alert-fires)). |
+
+### Measured times
+
+| What | Time | How it was measured |
+|---|---|---|
+| Serverless host, cold call | 18.6 s to 18.9 s (2 of 2 calls) | Browser time of the end-to-end test, through the edge. The gateway trace put 18.6 s in the stage `function-cold-start`. The second cold call came 17 minutes after the last call to the host. |
+| Serverless host, warm call | 0.25 s (guest preview) to 0.9 s (median of 11 signed-in calls; range 0.55 s to 1.2 s) | Browser time, same test. Gateway trace `totalMs` median 572 ms. |
+| AKS host, warm call | about 0.76 s (median of 12 calls; range 0.50 s to 1.1 s) | Browser time inside an access window. Gateway trace `totalMs` median 519 ms. |
+| `POST .../contracts/{id}/activate` | 4.6 s to 4.8 s on both hosts | Browser time. The other writes take 0.9 s to 1.2 s. The cause is not known yet. |
+| Cluster stop | about 2 minutes | From the accepted ARM stop to `Stopped / Succeeded` in `az aks show`. |
+| Cluster start from `Stopped` | not verified at the time of writing | |
+
+Local numbers from before the deploy (Functions host image under emulation: cold start 11.2 s to 12.0 s) are kept in the `api-host` README of `consignado-serverless`. They were too low: they do not include instance allocation and package mount on Azure.
 
 ## History
 

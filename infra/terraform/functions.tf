@@ -27,8 +27,12 @@ locals {
 
 # ---------- Gateway (Java 21) ----------
 
+locals {
+  gateway_app_name = "func-consignado-gw-${var.suffix}"
+}
+
 resource "azurerm_function_app_flex_consumption" "gateway" {
-  name                = "func-consignado-gw-${var.suffix}"
+  name                = local.gateway_app_name
   resource_group_name = local.rg_name
   location            = local.location
   service_plan_id     = azurerm_service_plan.gateway.id
@@ -37,7 +41,7 @@ resource "azurerm_function_app_flex_consumption" "gateway" {
   runtime_name           = "java"
   runtime_version        = "21"
   instance_memory_in_mb  = 2048
-  maximum_instance_count = var.function_max_instances
+  maximum_instance_count = var.gateway_max_instances
   https_only             = true
 
   # Deployment package: blob container, read with the app's identity (no connection string).
@@ -121,6 +125,19 @@ resource "azurerm_function_app_flex_consumption" "gateway" {
     BUDGET_LIMIT_USD    = tostring(var.budget_amount)
     AZURE_SUBSCRIPTION  = var.subscription_id
     AZURE_RESOURCEGROUP = local.rg_name
+
+    # Live status (contract addendum part 1): resources that the gateway reads from Azure Monitor and ARM.
+    # The own id is built from the names (a reference to this resource would be a cycle).
+    GATEWAY_APP_ID = "${azurerm_resource_group.main.id}/providers/Microsoft.Web/sites/${local.gateway_app_name}"
+    API_APP_ID     = azurerm_function_app_flex_consumption.api.id
+    KEY_VAULT_ID   = azurerm_key_vault.main.id
+    POSTGRES_ID    = azurerm_postgresql_flexible_server.main.id
+    APPINSIGHTS_ID = azurerm_application_insights.main.id
+
+    # Token check: only tokens issued to the SPA client (security review L5).
+    ENTRA_SPA_CLIENT_ID = azuread_application.spa.client_id
+    # Turnstile answer: its `hostname` must be one of the two site hosts (security review L4).
+    TURNSTILE_HOSTNAMES = join(",", [var.custom_domains["consignado"], var.custom_domains["cluster-consignado"]])
   }, local.email_settings)
 
   # The provider does not read AzureWebJobsStorage back, so the empty value above would show a change in every plan.
@@ -141,11 +158,12 @@ resource "azurerm_function_app_flex_consumption" "api" {
   runtime_name           = "custom"
   runtime_version        = "1.0"
   instance_memory_in_mb  = 2048
-  maximum_instance_count = var.function_max_instances
+  maximum_instance_count = var.api_host_max_instances
   https_only             = true
 
+  # Own storage account (security review M4): the package and the host storage are not in stconsigapp*.
   storage_container_type            = "blobContainer"
-  storage_container_endpoint        = "${azurerm_storage_account.app.primary_blob_endpoint}${azurerm_storage_container.app["deploy-api"].name}"
+  storage_container_endpoint        = "${azurerm_storage_account.apihost.primary_blob_endpoint}${azurerm_storage_container.apihost_deploy.name}"
   storage_authentication_type       = "UserAssignedIdentity"
   storage_user_assigned_identity_id = azurerm_user_assigned_identity.this["apifn"].id
 
@@ -173,7 +191,7 @@ resource "azurerm_function_app_flex_consumption" "api" {
   app_settings = {
     # Same rule as the gateway: no AzureWebJobsStorage setting beside the identity-based settings.
     AzureWebJobsStorage              = ""
-    AzureWebJobsStorage__accountName = azurerm_storage_account.app.name
+    AzureWebJobsStorage__accountName = azurerm_storage_account.apihost.name
     AzureWebJobsStorage__credential  = "managedidentity"
     AzureWebJobsStorage__clientId    = azurerm_user_assigned_identity.this["apifn"].client_id
 

@@ -2,6 +2,7 @@
 
 - Status: accepted
 - Date: 2026-11-17
+- Updated: 2026-11-17, after the first live day
 
 ## Context
 
@@ -26,7 +27,8 @@ The usual product for this is a separate Microsoft Entra External ID tenant: a d
 - **Visitors are guests in the tenant that also holds the subscription.** The sign-up gives them no Azure role, and the guest level is the most restricted one. It is still a weaker separation than a tenant of their own, and it is a known gap.
 - A person who asks for deletion has data in two places: the gateway tables and the guest user object in the tenant.
 - The tenant settings are global. They change guest behaviour for anything else in this tenant.
-- Not verified when this ADR was written: a full sign-up and sign-in from the live site. The link between the app and the user flow was read in the portal in the same session, with no reload.
+- Verified live on 2026-11-17: a full sign-up with a test mailbox ("Create one", then "Sign up with email", the code mail in less than 5 s, the name, back on the site), then a silent sign-in on the cluster host name.
+- The Microsoft pages and the code mail show the tenant's display name and domain, not the product. These are tenant settings, and they are a known gap.
 
 ## What a bank would add
 

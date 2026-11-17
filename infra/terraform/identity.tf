@@ -78,6 +78,7 @@ locals {
   kv_id  = azurerm_key_vault.main.id
   app_st = azurerm_storage_account.app.id
   web_st = azurerm_storage_account.web.id
+  api_st = azurerm_storage_account.apihost.id
 
   role_assignments = merge(
     {
@@ -102,20 +103,24 @@ locals {
       "gw-st-blob-owner"        = { scope = local.app_st, role = "Storage Blob Data Owner", principal = local.principal["gw"], type = "ServicePrincipal" } # host storage (AzureWebJobsStorage)
       "gw-aks-rbac-reader"      = { scope = local.aks_id, role = "Azure Kubernetes Service RBAC Reader", principal = local.principal["gw"], type = "ServicePrincipal" }
       "gw-cost-reader"          = { scope = azurerm_resource_group.main.id, role = "Cost Management Reader", principal = local.principal["gw"], type = "ServicePrincipal" }
+      # Live status (contract addendum part 1): metrics, resource health and resource state. Read-only.
+      "gw-monitoring-reader" = { scope = azurerm_resource_group.main.id, role = "Monitoring Reader", principal = local.principal["gw"], type = "ServicePrincipal" }
 
       # API host
-      "apifn-st-blob-owner" = { scope = local.app_st, role = "Storage Blob Data Owner", principal = local.principal["apifn"], type = "ServicePrincipal" } # host + deployment storage
+      # Own storage account only (security review M4): no role on stconsigapp*.
+      "apifn-st-blob-owner" = { scope = local.api_st, role = "Storage Blob Data Owner", principal = local.principal["apifn"], type = "ServicePrincipal" } # host + deployment storage
 
       # GitHub Actions
       "github-acr-push"         = { scope = azurerm_container_registry.main.id, role = "AcrPush", principal = local.principal["github"], type = "ServicePrincipal" }
       "github-aks-cluster-user" = { scope = local.aks_id, role = "Azure Kubernetes Service Cluster User Role", principal = local.principal["github"], type = "ServicePrincipal" }
       # RBAC Admin on one namespace only: the deploy job applies a SecretProviderClass (a custom resource),
       # which RBAC Writer cannot change. The namespace is made once by the cluster admin, not by the pipeline.
-      "github-aks-ns-admin" = { scope = "${local.aks_id}/namespaces/consignado", role = "Azure Kubernetes Service RBAC Admin", principal = local.principal["github"], type = "ServicePrincipal" }
-      "github-func-gw"      = { scope = azurerm_function_app_flex_consumption.gateway.id, role = "Website Contributor", principal = local.principal["github"], type = "ServicePrincipal" }
-      "github-func-api"     = { scope = azurerm_function_app_flex_consumption.api.id, role = "Website Contributor", principal = local.principal["github"], type = "ServicePrincipal" }
-      "github-st-app-blob"  = { scope = local.app_st, role = "Storage Blob Data Contributor", principal = local.principal["github"], type = "ServicePrincipal" }
-      "github-st-web-blob"  = { scope = local.web_st, role = "Storage Blob Data Contributor", principal = local.principal["github"], type = "ServicePrincipal" }
+      "github-aks-ns-admin"  = { scope = "${local.aks_id}/namespaces/consignado", role = "Azure Kubernetes Service RBAC Admin", principal = local.principal["github"], type = "ServicePrincipal" }
+      "github-func-gw"       = { scope = azurerm_function_app_flex_consumption.gateway.id, role = "Website Contributor", principal = local.principal["github"], type = "ServicePrincipal" }
+      "github-func-api"      = { scope = azurerm_function_app_flex_consumption.api.id, role = "Website Contributor", principal = local.principal["github"], type = "ServicePrincipal" }
+      "github-st-app-blob"   = { scope = local.app_st, role = "Storage Blob Data Contributor", principal = local.principal["github"], type = "ServicePrincipal" }
+      "github-st-apifn-blob" = { scope = local.api_st, role = "Storage Blob Data Contributor", principal = local.principal["github"], type = "ServicePrincipal" }
+      "github-st-web-blob"   = { scope = local.web_st, role = "Storage Blob Data Contributor", principal = local.principal["github"], type = "ServicePrincipal" }
     },
     var.enable_email ? {
       "gw-email-send" = { scope = azurerm_communication_service.main[0].id, role = "Communication and Email Service Owner", principal = local.principal["gw"], type = "ServicePrincipal" }
