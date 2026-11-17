@@ -44,9 +44,9 @@ Both host names go to the same Worker.
 | [business.md](business.md) | The product decisions: who it is for, the limits, the budget, what is not built. |
 | ADRs | [0008 gateway](../adr/0008-gateway-in-front-of-two-hosts.md), [0009 cold cluster](../adr/0009-cold-cluster-and-access-windows.md), [0010 Cloudflare edge](../adr/0010-cloudflare-edge-instead-of-front-door.md), [0011 sign-up](../adr/0011-sign-up-in-the-workforce-tenant.md), [0012 budget and abuse](../adr/0012-budget-guard-and-abuse-limits.md). ADR 0001 to 0007 are about the API itself. |
 
-## Status (2026-11-17)
+## Status (2026-11-17, 06:00 UTC-3)
 
-This table is taken from the reports of the build. "Not verified" means: no report shows a live check. It does not mean "broken".
+This table is taken from the reports and the state notes of the build. "Not verified" means: no report shows a live check. It does not mean "broken".
 
 | Part | Status |
 |---|---|
@@ -58,11 +58,12 @@ This table is taken from the reports of the build. "Not verified" means: no repo
 | PostgreSQL server ready; database password resolved from Key Vault by the API host | **Verified.** |
 | AKS settings: Azure RBAC on, local accounts off, workload identity on | **Verified.** |
 | Sign-up user flow with email one-time code, linked to the site's app registration | **Configured.** Read in the portal in the same session. No reload check. |
-| The Worker `consignado-edge` on the two host names | Not verified. |
-| Gateway code deployed and answering through the edge | Not verified. |
-| API on the serverless host, deployed and answering | Not verified. |
-| API on the AKS host behind the internal load balancer | Not verified. |
-| The three deploy workflows with GitHub OIDC login | Not verified. No report shows a run. |
+| The Worker `consignado-edge` on `consignado.kmads.dev` | **Live.** It serves the static site from Blob Storage. |
+| The Worker on `cluster.consignado.kmads.dev` | Not verified. The certificate of this host name was still in validation at the last check. |
+| Gateway code | **Deployed, not working at the last check.** The deploy workflow was green, but the gateway answered HTTP 500. The cause was under investigation. |
+| API on the serverless host | Not verified. The first workflow run failed on a download error of the runner and was started again; the result is not in the sources. |
+| API on the AKS host behind the internal load balancer | Not verified. The first deploy job failed on the same download error and was started again; the result is not in the sources. |
+| Deploy workflows with GitHub OIDC login | The gateway workflow ran green. The other workflows: not verified. |
 | A full sign-up and sign-in from the site | Not verified. |
 | A full access window: start, ready, countdown, stop, cool-down | Not verified. |
 | Email to the owner; delivery of the budget alert; the budget webhook | Not verified. |
