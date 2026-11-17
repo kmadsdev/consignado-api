@@ -1,6 +1,7 @@
 package io.github.kmadsdev.consignado;
 
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes;
+import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noFields;
 import static com.tngtech.archunit.library.Architectures.layeredArchitecture;
 import static com.tngtech.archunit.library.GeneralCodingRules.NO_CLASSES_SHOULD_ACCESS_STANDARD_STREAMS;
@@ -45,6 +46,14 @@ class ArchitectureTest {
     static final ArchRule domainIsPureJava = classes().that().resideInAPackage("..domain..")
             .should().onlyDependOnClassesThat().resideInAnyPackage("java..", "..domain..")
             .because("business rules must be testable without Spring, JPA or a database");
+
+    @ArchTest
+    static final ArchRule guestPreviewNeedsNoStorage = noClasses().that().haveSimpleName("SimulationPreviewService")
+            .should().dependOnClassesThat().resideInAnyPackage(
+                    "..persistence..", "..outbox..", "jakarta.persistence..", "javax.sql..",
+                    "org.springframework.data..", "org.springframework.transaction..", "org.springframework.jdbc..")
+            .because("a guest without a token may call it, so it must never reach the database "
+                    + "(docs/adr/0007-two-hosts-one-api.md)");
 
     @ArchTest
     static final ArchRule entitiesStayInStorageModules = classes().that().areAnnotatedWith(Entity.class)
