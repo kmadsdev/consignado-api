@@ -45,7 +45,7 @@ output "key_vault" {
     name         = azurerm_key_vault.main.name
     id           = azurerm_key_vault.main.id
     uri          = azurerm_key_vault.main.vault_uri
-    secret_names = ["db-password", "apifn-host-key", "turnstile-secret"]
+    secret_names = ["db-password", "edge-key", "apifn-host-key", "turnstile-secret"]
   }
 }
 
@@ -104,7 +104,8 @@ output "functions" {
       deploy_container = "deploy-gateway"
       vnet_integrated  = var.enable_function_vnet_integration
       base_url         = "https://${azurerm_function_app_flex_consumption.gateway.default_hostname}"
-      inbound          = var.enable_front_door ? "front-door-only" : (length(var.gateway_allowed_cidrs) > 0 ? "allowed-cidrs" : "all-sources")
+      inbound          = var.enable_front_door ? "front-door-only" : (length(var.gateway_allowed_cidrs) > 0 ? "edge-ip-ranges-only" : "all-sources")
+      allowed_cidrs    = var.enable_front_door ? [] : var.gateway_allowed_cidrs
     }
     api = {
       name             = azurerm_function_app_flex_consumption.api.name
@@ -165,6 +166,15 @@ output "front_door" {
 # Records to create in Cloudflare (DNS only, not proxied). Empty while enable_front_door = false.
 output "dns_records" {
   value = flatten(module.edge[*].dns_records)
+}
+
+output "edge" {
+  value = {
+    kind                 = var.enable_front_door ? "front-door" : var.edge
+    static_site_host     = azurerm_storage_account.web.primary_web_host
+    gateway_host         = azurerm_function_app_flex_consumption.gateway.default_hostname
+    shared_header_secret = "edge-key"
+  }
 }
 
 output "email" {

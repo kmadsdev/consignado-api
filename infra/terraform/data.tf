@@ -76,6 +76,23 @@ resource "azurerm_key_vault_secret" "db_password" {
   depends_on = [azurerm_role_assignment.user_kv_secrets_officer]
 }
 
+# Shared secret between the edge (Cloudflare Worker) and the gateway. The gateway reads it from Key Vault;
+# the integrator copies it into the Worker. Never an output.
+resource "random_password" "edge_key" {
+  length  = 48
+  special = false
+}
+
+resource "azurerm_key_vault_secret" "edge_key" {
+  name         = "edge-key"
+  key_vault_id = azurerm_key_vault.main.id
+  value        = random_password.edge_key.result
+  content_type = "Shared header value: edge -> gateway"
+  tags         = local.tags
+
+  depends_on = [azurerm_role_assignment.user_kv_secrets_officer]
+}
+
 # ---------- Storage: static site ----------
 
 resource "azurerm_storage_account" "web" {

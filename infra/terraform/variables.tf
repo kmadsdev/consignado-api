@@ -119,10 +119,32 @@ variable "enable_front_door" {
   default     = false
 }
 
+variable "edge" {
+  description = "The edge in front of the gateway and the site. `cloudflare` = a Cloudflare Worker (owner's decision, 2026-11-17, because Front Door is refused)."
+  type        = string
+  default     = "cloudflare"
+}
+
 variable "gateway_allowed_cidrs" {
-  description = "Only when enable_front_door = false: name => CIDR range that can call the gateway (for example the ranges of another edge). Empty = the gateway accepts all sources (HTTPS only)."
-  type        = map(string)
-  default     = {}
+  description = "Only when enable_front_door = false: the IPv4 ranges that can call the gateway. Default: the Cloudflare ranges of https://www.cloudflare.com/ips-v4, read on 2026-11-17. Empty = all sources (HTTPS only)."
+  type        = list(string)
+  default = [
+    "173.245.48.0/20",
+    "103.21.244.0/22",
+    "103.22.200.0/22",
+    "103.31.4.0/22",
+    "141.101.64.0/18",
+    "108.162.192.0/18",
+    "190.93.240.0/20",
+    "188.114.96.0/20",
+    "197.234.240.0/22",
+    "198.41.128.0/17",
+    "162.158.0.0/15",
+    "104.16.0.0/13",
+    "104.24.0.0/14",
+    "172.64.0.0/13",
+    "131.0.72.0/22",
+  ]
 }
 
 variable "enable_email" {

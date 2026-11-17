@@ -1,7 +1,11 @@
 # Terraform: consignado platform on Azure
 
-This directory creates every Azure resource of the platform (contract section 2) in the subscription
+This directory creates the Azure resources of the platform (contract section 2) in the subscription
 "Azure for Students". State is remote (Azure Storage, Entra ID auth, no account key).
+
+> **Front Door is not created.** The subscription refuses it: `BadRequest: Free Trial and Student account is forbidden for
+> Azure Frontdoor resources.` The code is in `modules/edge` behind `enable_front_door` (default `false`). The edge is a
+> Cloudflare Worker (owner's decision, 2026-11-17); see "Decisions".
 
 - Terraform >= 1.9 (made with 1.16), providers `azurerm` 4.x, `azuread` 3.x, `random` 3.x (versions pinned in `.terraform.lock.hcl`).
 - Sign in first: `az login` as the Owner of the subscription. The same user must be able to create app registrations in the tenant.
@@ -39,7 +43,8 @@ Notes for operation:
 - **PostgreSQL region.** If `Standard_B1ms` has no capacity (`RegionalAllocationFailed`), set `-var pg_location=<other allowed region>`.
   A failed create reserves the server name in the first region for some time: also set `-var pg_server_name=psql-consignado-km01-<n>`.
 - **Budget webhook.** `-var budget_webhook_url=https://...` adds the gateway webhook to the action group. Empty = email only.
-- **Feature flags.** `enable_email`, `enable_budget`, `enable_function_vnet_integration` switch off a part that the subscription refuses.
+- **Feature flags.** `enable_front_door` (default `false`), `enable_email`, `enable_budget`, `enable_function_vnet_integration` switch a part that the subscription refuses.
+- **Cloudflare ranges.** `gateway_allowed_cidrs` holds the list of `https://www.cloudflare.com/ips-v4` of 2026-11-17. When Cloudflare changes the list, change the variable and apply.
 - The subscription policy allows only `belgiumcentral`, `northcentralus`, `chilecentral`, `mexicocentral`, `southafricanorth`.
 
 ## Files
@@ -51,9 +56,9 @@ Notes for operation:
 | `main.tf` | Resource group, tags, shared locals. |
 | `network.tf` | `vnet-consignado`, `snet-aks`, `snet-func`. |
 | `aks.tf` | Registry and AKS cluster. |
-| `data.tf` | PostgreSQL, Key Vault, the two storage accounts, containers, tables. |
+| `data.tf` | PostgreSQL, Key Vault and its secrets (`db-password`, `edge-key`), the two storage accounts, containers, tables. |
 | `functions.tf` | The two Flex Consumption function apps and their plans. |
-| `edge.tf` | Front Door profile, endpoint, origins, routes, rule sets, custom domains, WAF. |
+| `edge.tf` + `modules/edge/` | Front Door profile, endpoint, origins, routes, rule sets, custom domains, WAF. Off (`enable_front_door = false`). The one module of this stack: it lets one flag switch 18 resources. |
 | `identity.tf` | Managed identities, federated credentials, all role assignments, the custom role, Entra app registrations. |
 | `monitoring.tf` | Log Analytics, Application Insights, Communication Services (email). |
 | `budget.tf` | Budget and action group. |
@@ -66,15 +71,15 @@ Notes for operation:
 | Virtual network | `vnet-consignado` 10.10.0.0/16 | belgiumcentral | `snet-aks` 10.10.0.0/22; `snet-func` 10.10.8.0/24 (delegation `Microsoft.App/environments`, service endpoint `Microsoft.Web`). |
 | AKS | `aks-consignado` | belgiumcentral | Free tier, 1 x `Standard_D2as_v4`, Azure CNI overlay (pods 10.244.0.0/16, services 10.0.0.0/16), OIDC issuer, workload identity, Key Vault CSI add-on, Entra ID + Azure RBAC, local accounts off, managed OS disk 32 GB. |
 | Registry | `crconsignadokm01` | belgiumcentral | Basic, admin user off. |
-| Key Vault | `kv-consig-km01` | belgiumcentral | RBAC mode. Secret `db-password` (Terraform). `apifn-host-key`, `turnstile-secret`: the integrator. |
+| Key Vault | `kv-consig-km01` | belgiumcentral | RBAC mode. Secrets `db-password` and `edge-key` (Terraform). `apifn-host-key`, `turnstile-secret`: the integrator. |
 | PostgreSQL | `psql-consignado-km01` | northcentralus (`pg_location`) | Flexible server `B_Standard_B1ms`, v16, 32 GB, database `consignado`, admin `pgadmin`, public endpoint + rule `AllowAllAzureServices`. |
 | Storage (site) | `stconsigwebkm01` | belgiumcentral | Static website (`index.html`, error document `index.html`), no account key. |
-| Storage (app) | `stconsigappkm01` | belgiumcentral | Containers `deploy-gateway`, `deploy-api`, `data`; tables `users`, `sessions`, `engine`, `contacts`, `audit`; no account key. |
+| Storage (app) | `stconsigappkm01` | belgiumcentral | Containers `deploy-gateway`, `deploy-api`, `data`; tables `users`, `sessions`, `engine`, `contacts`, `audit` (ARM deployment `consignado-tables`); no account key. |
 | Monitoring | `log-consignado`, `appi-consignado` | belgiumcentral | Daily cap 1 GB, 30 days. |
-| Gateway | `func-consignado-gw-km01` (plan `asp-consignado-gw-km01`) | belgiumcentral | Flex Consumption, Java 21, 2048 MB, max 4 instances, VNet integration `snet-func`, inbound: `AzureFrontDoor.Backend` + `X-Azure-FDID` only. |
+| Gateway | `func-consignado-gw-km01` (plan `asp-consignado-gw-km01`) | belgiumcentral | Flex Consumption, Java 21, 2048 MB, max 4 instances, VNet integration `snet-func`, inbound: the 15 Cloudflare IPv4 ranges only, all other sources denied (with Front Door: `AzureFrontDoor.Backend` + `X-Azure-FDID`). |
 | API host | `func-consignado-api-km01` (plan `asp-consignado-api-km01`) | belgiumcentral | Flex Consumption, runtime `custom`, 2048 MB, max 4 instances, inbound: `snet-func` only. |
-| Front Door | `afd-consignado` (Standard), endpoint `consignado-km01` | global | Routes `/api/*` -> gateway (no cache), `/*` -> static site (cache + SPA rewrite); security headers; 2 custom domains with managed certificates. |
-| WAF | `wafconsignado` | global | Prevention. Rate limits per client IP: 120/min on `/api/`, 600/min on all paths. |
+| Front Door (**not created, refused**) | `afd-consignado` (Standard), endpoint `consignado-km01` | global | Routes `/api/*` -> gateway (no cache), `/*` -> static site (cache + SPA rewrite); security headers; 2 custom domains with managed certificates. |
+| WAF (**not created, refused**) | `wafconsignado` | global | Prevention. Rate limits per client IP: 120/min on `/api/`, 600/min on all paths. |
 | Email | `acs-consignado-km01`, `acs-email-consignado-km01`, `AzureManagedDomain` | global (data: Europe) | Sender `DoNotReply@<guid>.azurecomm.net`. |
 | Identities | `id-consignado-app`, `-gw`, `-apifn`, `-github` | belgiumcentral | User-assigned. Federated credentials: pods, and the `main` branch of the three GitHub repositories. |
 | Custom role | `Consignado Engine Operator` | scope `rg-consignado` | read / start / stop / agentPools read / listClusterUserCredential. No write, no delete. |
@@ -102,7 +107,7 @@ Notes for operation:
 | `id-consignado-github` | Azure Kubernetes Service Cluster User Role, Azure Kubernetes Service RBAC Writer, Consignado Engine Operator | cluster |
 | `id-consignado-github` | Website Contributor | both function apps |
 | `id-consignado-github` | Storage Blob Data Contributor | `stconsigappkm01`, `stconsigwebkm01` |
-| `id-consignado-github` | CDN Endpoint Contributor (purge) | Front Door profile |
+| `id-consignado-github` | CDN Endpoint Contributor (purge) | Front Door profile: only when `enable_front_door = true` (not assigned now) |
 
 ## Cost per month
 
@@ -111,7 +116,8 @@ A month = 730 hours. Lines with **(estimate)** depend on use.
 
 | Item | Unit price | Cluster stopped (normal state) | Notes |
 |---|---|---|---|
-| Front Door Standard, base fee | 35.00 / month | 35.00 | The largest fixed cost. Requests and data are extra: (estimate) < 1.00 for a demo. |
+| Front Door Standard, base fee | 35.00 / month | 0 (not created) | Refused on this subscription. On a subscription that allows it: 35.00, the largest fixed cost. |
+| Cloudflare Worker (edge) | 0 | 0 | Free plan: 100 000 requests per day. Not an Azure cost. |
 | PostgreSQL B1ms compute (northcentralus) | 0.017 / hour | 12.41 | Runs all the time. `az postgres flexible-server stop` saves it for 7 days at most (then Azure starts the server again). |
 | PostgreSQL storage 32 GB | 0.115 / GB-month | 3.68 | Backup storage up to the server size is free. |
 | Registry Basic | 0.1666 / day | 5.00 | 10 GB included. |
@@ -126,15 +132,24 @@ A month = 730 hours. Lines with **(estimate)** depend on use.
 | Log Analytics / Application Insights | 2.99 / GB ingested | **(estimate)** 0 to 3 | The first 5 GB per month are free; daily cap 1 GB. |
 | Communication Services email | per message | **(estimate)** < 0.10 | |
 | Budget, action group, identities, VNet, WAF policy (Standard tier), Entra apps | 0 | 0 | |
-| **Total** | | **about 66 to 70 fixed, up to about 88 with the load balancer line** | |
+| **Total (as built, no Front Door)** | | **about 31 to 35 fixed; up to about 53 if the load balancer line is billed in full** | |
 
-**The fixed cost is higher than the US$60 budget.** Front Door Standard alone is US$35. The budget alert at 100 percent will fire
-each month unless one of these is done: stop PostgreSQL when the demo is not in use, replace Front Door Standard
-(for example Cloudflare in front of the storage site and the gateway, at no cost), or raise the budget. This is a decision for the owner.
+The fixed cost is below the US$60 budget, mainly PostgreSQL (16.09), the registry (5.00), the OS disk (5.81) and the public IP (3.65).
+With Front Door Standard (+35.00) the fixed cost would be about 66 to 70: higher than the budget. Keep that in mind before
+`enable_front_door = true` on a different subscription. A running cluster adds 2.50 per day.
 
 ## Decisions and trade-offs
 
-- **Front Door Standard.** It gives one public entry for the site and the API, a CDN, managed certificates for the custom
+- **Edge: Cloudflare Worker, not Front Door (2026-11-17).** The offer "Azure for Students" refuses Front Door
+  (`Free Trial and Student account is forbidden for Azure Frontdoor resources`). The owner chose Cloudflare: the DNS zone
+  `kmads.dev` is there already, the Worker costs nothing, and it gives TLS for the custom domains, a cache for the site and
+  rate limits. What replaces the Front Door controls: (1) the gateway function app accepts only the Cloudflare IPv4 ranges
+  (`gateway_allowed_cidrs`, 15 rules, default action Deny); (2) those ranges are shared by all Cloudflare customers, so the
+  gateway also checks a shared header: the value is the Key Vault secret `edge-key` (48 random characters, made here; the
+  integrator copies it into the Worker as a secret); (3) app setting `EDGE=cloudflare` tells the gateway which edge it has.
+  Trade-off: no Azure WAF, the IP list must be kept current by hand, and the SPA rewrite and the security headers move from
+  the rule engine into the Worker. The static site stays in `stconsigwebkm01` (output `edge.static_site_host`).
+- **Front Door Standard (the first design, kept in `modules/edge`).** It gives one public entry for the site and the API, a CDN, managed certificates for the custom
   domains, a rule engine (SPA rewrite, security headers) and a WAF with rate limits. Premium adds managed WAF rule sets and
   Private Link origins, but costs US$330 per month. Standard supports custom WAF rules only; that is why the WAF has only
   rate-limit rules. The gateway accepts only the `AzureFrontDoor.Backend` service tag with the `X-Azure-FDID` header of this

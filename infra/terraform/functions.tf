@@ -58,7 +58,8 @@ resource "azurerm_function_app_flex_consumption" "gateway" {
     application_insights_connection_string = azurerm_application_insights.main.connection_string
 
     # Inbound: only Azure Front Door, and only this Front Door profile.
-    # Without Front Door (refused on this subscription): var.gateway_allowed_cidrs, or all sources when that is empty.
+    # Without Front Door (refused on this subscription): only var.gateway_allowed_cidrs (the Cloudflare ranges),
+    # or all sources when that list is empty. The gateway also checks a shared header (Key Vault secret `edge-key`).
     ip_restriction_default_action = var.enable_front_door || length(var.gateway_allowed_cidrs) > 0 ? "Deny" : "Allow"
 
     dynamic "ip_restriction" {
@@ -80,11 +81,11 @@ resource "azurerm_function_app_flex_consumption" "gateway" {
     }
 
     dynamic "ip_restriction" {
-      for_each = var.enable_front_door ? {} : var.gateway_allowed_cidrs
+      for_each = var.enable_front_door ? [] : var.gateway_allowed_cidrs
 
       content {
-        name       = ip_restriction.key
-        priority   = 200 + index(keys(var.gateway_allowed_cidrs), ip_restriction.key)
+        name       = "edge-${ip_restriction.key + 1}"
+        priority   = 200 + ip_restriction.key
         action     = "Allow"
         ip_address = ip_restriction.value
       }
@@ -108,6 +109,7 @@ resource "azurerm_function_app_flex_consumption" "gateway" {
     APIFN_BASE_URL      = "https://${azurerm_function_app_flex_consumption.api.default_hostname}"
     KEY_VAULT_URL       = azurerm_key_vault.main.vault_uri
     STORAGE_ACCOUNT     = azurerm_storage_account.app.name
+    EDGE                = var.edge
     OWNER_EMAIL         = var.owner_email
     WINDOW_MINUTES      = "15"
     WINDOWS_MAX         = "3"

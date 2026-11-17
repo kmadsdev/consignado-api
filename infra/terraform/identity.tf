@@ -20,12 +20,11 @@ locals {
 
 # Pods: service account `consignado-api` in namespace `consignado`.
 resource "azurerm_federated_identity_credential" "app" {
-  name                = "aks-consignado-api"
-  resource_group_name = local.rg_name
-  parent_id           = azurerm_user_assigned_identity.this["app"].id
-  audience            = ["api://AzureADTokenExchange"]
-  issuer              = azurerm_kubernetes_cluster.main.oidc_issuer_url
-  subject             = "system:serviceaccount:consignado:consignado-api"
+  name                      = "aks-consignado-api"
+  user_assigned_identity_id = azurerm_user_assigned_identity.this["app"].id
+  audience                  = ["api://AzureADTokenExchange"]
+  issuer                    = azurerm_kubernetes_cluster.main.oidc_issuer_url
+  subject                   = "system:serviceaccount:consignado:consignado-api"
 }
 
 # GitHub Actions, branch main. These repositories use the immutable subject format
@@ -33,12 +32,11 @@ resource "azurerm_federated_identity_credential" "app" {
 resource "azurerm_federated_identity_credential" "github" {
   for_each = var.github_repositories
 
-  name                = "github-${each.key}-main"
-  resource_group_name = local.rg_name
-  parent_id           = azurerm_user_assigned_identity.this["github"].id
-  audience            = ["api://AzureADTokenExchange"]
-  issuer              = "https://token.actions.githubusercontent.com"
-  subject             = "repo:${var.github_owner.login}@${var.github_owner.id}/${each.key}@${each.value}:ref:refs/heads/main"
+  name                      = "github-${each.key}-main"
+  user_assigned_identity_id = azurerm_user_assigned_identity.this["github"].id
+  audience                  = ["api://AzureADTokenExchange"]
+  issuer                    = "https://token.actions.githubusercontent.com"
+  subject                   = "repo:${var.github_owner.login}@${var.github_owner.id}/${each.key}@${each.value}:ref:refs/heads/main"
 }
 
 # ---------- Custom role: start and stop the cluster, nothing more ----------
