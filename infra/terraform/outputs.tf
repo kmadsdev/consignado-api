@@ -1,26 +1,21 @@
-# Non-secret values only. `terraform output -json > outputs.json` is committed.
+# Non-secret values only. `terraform output -json > outputs.json` is committed to a PUBLIC repository.
+# Security review I4 (2026-11-17): no tenant id, no subscription id, no object id of a person. ARM resource ids hold
+# the subscription id, so no output has one; the names are enough (`az resource show -g rg-consignado -n <name> ...`).
+# Read the ids with `az account show` or `az <type> show --query id` when you need them.
 
-output "tenant_id" { value = local.tenant_id }
-output "subscription_id" { value = var.subscription_id }
 output "resource_group" { value = local.rg_name }
 output "location" { value = local.location }
-output "admin_oid" { value = local.admin_oid }
 
 output "vnet" {
   value = {
-    name         = azurerm_virtual_network.main.name
-    id           = azurerm_virtual_network.main.id
-    snet_aks_id  = azurerm_subnet.aks.id
-    snet_func_id = azurerm_subnet.func.id
+    name = azurerm_virtual_network.main.name
   }
 }
 
 output "aks" {
   value = {
     name                = azurerm_kubernetes_cluster.main.name
-    id                  = azurerm_kubernetes_cluster.main.id
     api_server_url      = "https://${azurerm_kubernetes_cluster.main.fqdn}:443"
-    oidc_issuer_url     = azurerm_kubernetes_cluster.main.oidc_issuer_url
     node_resource_group = azurerm_kubernetes_cluster.main.node_resource_group
     internal_lb_ip      = var.aks_internal_lb_ip
     internal_url        = "http://${var.aks_internal_lb_ip}"
@@ -35,24 +30,22 @@ output "aks" {
 output "registry" {
   value = {
     name         = azurerm_container_registry.main.name
-    id           = azurerm_container_registry.main.id
     login_server = azurerm_container_registry.main.login_server
   }
 }
 
 output "key_vault" {
   value = {
-    name         = azurerm_key_vault.main.name
-    id           = azurerm_key_vault.main.id
-    uri          = azurerm_key_vault.main.vault_uri
-    secret_names = ["db-password", "edge-key", "hash-key", "apifn-host-key", "turnstile-secret"]
+    name             = azurerm_key_vault.main.name
+    uri              = azurerm_key_vault.main.vault_uri
+    secret_names     = ["db-password", "edge-key", "hash-key", "apifn-host-key", "turnstile-secret"]
+    purge_protection = azurerm_key_vault.main.purge_protection_enabled
   }
 }
 
 output "postgres" {
   value = {
     server_name     = azurerm_postgresql_flexible_server.main.name
-    id              = azurerm_postgresql_flexible_server.main.id
     location        = azurerm_postgresql_flexible_server.main.location
     fqdn            = azurerm_postgresql_flexible_server.main.fqdn
     database        = local.db_name
@@ -66,18 +59,21 @@ output "storage" {
   value = {
     web = {
       name         = azurerm_storage_account.web.name
-      id           = azurerm_storage_account.web.id
       web_host     = azurerm_storage_account.web.primary_web_host
       web_endpoint = azurerm_storage_account.web.primary_web_endpoint
       container    = "$web"
     }
     app = {
       name           = azurerm_storage_account.app.name
-      id             = azurerm_storage_account.app.id
       blob_endpoint  = azurerm_storage_account.app.primary_blob_endpoint
       table_endpoint = azurerm_storage_account.app.primary_table_endpoint
       containers     = sort([for c in azurerm_storage_container.app : c.name])
       tables         = sort(local.tables)
+    }
+    apihost = {
+      name          = azurerm_storage_account.apihost.name
+      blob_endpoint = azurerm_storage_account.apihost.primary_blob_endpoint
+      containers    = [azurerm_storage_container.apihost_deploy.name]
     }
   }
 }
@@ -85,9 +81,7 @@ output "storage" {
 output "monitoring" {
   value = {
     log_analytics_name    = azurerm_log_analytics_workspace.main.name
-    log_analytics_id      = azurerm_log_analytics_workspace.main.id
     app_insights_name     = azurerm_application_insights.main.name
-    app_insights_id       = azurerm_application_insights.main.id
     app_insights_app_id   = azurerm_application_insights.main.app_id
     budget_action_group   = one(azurerm_monitor_action_group.budget[*].name)
     budget_name           = one(azurerm_consumption_budget_subscription.main[*].name)
@@ -99,9 +93,10 @@ output "functions" {
   value = {
     gateway = {
       name             = azurerm_function_app_flex_consumption.gateway.name
-      id               = azurerm_function_app_flex_consumption.gateway.id
       hostname         = azurerm_function_app_flex_consumption.gateway.default_hostname
       deploy_container = "deploy-gateway"
+      storage_account  = azurerm_storage_account.app.name
+      max_instances    = var.gateway_max_instances
       vnet_integrated  = var.enable_function_vnet_integration
       base_url         = "https://${azurerm_function_app_flex_consumption.gateway.default_hostname}"
       inbound          = var.enable_front_door ? "front-door-only" : (length(var.gateway_allowed_cidrs) > 0 ? "edge-ip-ranges-only" : "all-sources")
@@ -109,10 +104,11 @@ output "functions" {
     }
     api = {
       name             = azurerm_function_app_flex_consumption.api.name
-      id               = azurerm_function_app_flex_consumption.api.id
       hostname         = azurerm_function_app_flex_consumption.api.default_hostname
       base_url         = "https://${azurerm_function_app_flex_consumption.api.default_hostname}"
-      deploy_container = "deploy-api"
+      deploy_container = azurerm_storage_container.apihost_deploy.name
+      storage_account  = azurerm_storage_account.apihost.name
+      max_instances    = var.api_host_max_instances
     }
   }
 }
@@ -120,7 +116,6 @@ output "functions" {
 output "identities" {
   value = {
     for k, v in azurerm_user_assigned_identity.this : v.name => {
-      id           = v.id
       client_id    = v.client_id
       principal_id = v.principal_id
     }
@@ -129,17 +124,13 @@ output "identities" {
 
 output "github_oidc" {
   value = {
-    client_id       = azurerm_user_assigned_identity.this["github"].client_id
-    tenant_id       = local.tenant_id
-    subscription_id = var.subscription_id
-    subjects        = { for k, v in azurerm_federated_identity_credential.github : k => v.subject }
+    client_id = azurerm_user_assigned_identity.this["github"].client_id
+    subjects  = { for k, v in azurerm_federated_identity_credential.github : k => v.subject }
   }
 }
 
 output "entra" {
   value = {
-    tenant_id        = local.tenant_id
-    authority        = "https://login.microsoftonline.com/${local.tenant_id}"
     sign_in_audience = var.entra_sign_in_audience
     spa = {
       display_name  = azuread_application.spa.display_name
