@@ -300,4 +300,4 @@ The API host package is built from the API source at a chosen ref, so the server
 
 The Worker and Terraform are run by hand. A Cloudflare token is not stored in any repository, and Terraform needs the owner's sign-in.
 
-No report shows a run of these workflows against Azure: not verified.
+State on 2026-11-17: the gateway workflow ran green against Azure. A green run of the other workflows is not in the sources: not verified.
