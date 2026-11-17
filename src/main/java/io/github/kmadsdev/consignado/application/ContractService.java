@@ -26,16 +26,12 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
 @Service
 public class ContractService {
-
-    private static final Sort NEWEST_FIRST = Sort.by(Sort.Order.desc("createdAt"), Sort.Order.asc("id"));
 
     private final LoanContractRepository contracts;
     private final LoanSimulationRepository simulations;
@@ -141,7 +137,7 @@ public class ContractService {
     @Transactional(readOnly = true)
     public PageView<ContractView> list(UUID customerId, ContractStatus status, int page, int size) {
         var result = contracts.findAll(
-                LoanContractRepository.matching(customerId, status), PageRequest.of(page, size, NEWEST_FIRST));
+                LoanContractRepository.matching(customerId, status), Paging.newestFirst(page, size));
         return PageView.from(result, ContractView::from);
     }
 

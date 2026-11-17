@@ -2,6 +2,7 @@ package io.github.kmadsdev.consignado.application;
 
 import io.github.kmadsdev.consignado.application.Views.CustomerView;
 import io.github.kmadsdev.consignado.application.Views.MarginView;
+import io.github.kmadsdev.consignado.application.Views.PageView;
 import io.github.kmadsdev.consignado.domain.BusinessRuleViolationException;
 import io.github.kmadsdev.consignado.domain.ContractStatus;
 import io.github.kmadsdev.consignado.domain.Cpf;
@@ -54,6 +55,10 @@ public class CustomerService {
 
     public CustomerView get(UUID id) {
         return CustomerView.from(find(id));
+    }
+
+    public PageView<CustomerView> list(int page, int size) {
+        return PageView.from(customers.findAll(Paging.newestFirst(page, size)), CustomerView::from);
     }
 
     public MarginView margin(UUID id) {

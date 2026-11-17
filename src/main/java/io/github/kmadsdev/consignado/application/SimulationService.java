@@ -1,5 +1,6 @@
 package io.github.kmadsdev.consignado.application;
 
+import io.github.kmadsdev.consignado.application.Views.PageView;
 import io.github.kmadsdev.consignado.application.Views.SimulationView;
 import io.github.kmadsdev.consignado.domain.BusinessRuleViolationException;
 import io.github.kmadsdev.consignado.domain.ContractStatus;
@@ -94,5 +95,10 @@ public class SimulationService {
                 simulation.getMonthlyInterestRate(), simulation.getTermMonths(),
                 BusinessCalendar.firstDueDate(simulation.getCreatedAt()));
         return SimulationView.from(simulation, schedule);
+    }
+
+    /** Summaries only: a page of 100 quotes with up to 420 schedule lines each is not a listing. */
+    public PageView<SimulationView> list(int page, int size) {
+        return PageView.from(simulations.findAll(Paging.newestFirst(page, size)), SimulationView::summary);
     }
 }
