@@ -57,6 +57,23 @@ public class CustomerService {
         return CustomerView.from(find(id));
     }
 
+    /**
+     * The one update of shared data outside the contract workflow. It locks the customer
+     * row like an approval does, so the two serialize: whichever comes second sees the
+     * other's result, and the committed installments never end above the limit.
+     */
+    @Transactional
+    public CustomerView changeIncome(UUID id, BigDecimal netMonthlySalary) {
+        Customer customer = customers.findByIdForUpdate(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Customer", id));
+        Agreement agreement = agreements.findById(customer.getAgreementId()).orElseThrow();
+        BigDecimal committed = contracts.sumInstallments(id, ContractStatus.marginConsuming());
+        MarginPolicy.requireCovers(
+                MarginPolicy.marginLimit(netMonthlySalary, agreement.getMaxMarginPercent()), committed);
+        customer.changeNetMonthlySalary(netMonthlySalary);
+        return CustomerView.from(customers.saveAndFlush(customer));
+    }
+
     public PageView<CustomerView> list(int page, int size) {
         return PageView.from(customers.findAll(Paging.newestFirst(page, size)), CustomerView::from);
     }

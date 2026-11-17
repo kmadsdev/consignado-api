@@ -42,6 +42,12 @@ final class Requests {
             BigDecimal netMonthlySalary) {
     }
 
+    /** Same rules as {@code netMonthlySalary} in {@link CreateCustomer}. */
+    record ChangeIncome(
+            @NotNull @DecimalMin(value = "0", inclusive = false) @Digits(integer = 13, fraction = 2)
+            BigDecimal monthlyIncome) {
+    }
+
     record CreateSimulation(
             @NotNull
             UUID customerId,

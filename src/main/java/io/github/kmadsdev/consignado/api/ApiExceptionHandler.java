@@ -7,6 +7,7 @@ import io.github.kmadsdev.consignado.application.ResourceNotFoundException;
 import io.github.kmadsdev.consignado.application.VersionMismatchException;
 import io.github.kmadsdev.consignado.domain.BusinessRuleViolationException;
 import io.github.kmadsdev.consignado.domain.IllegalStatusTransitionException;
+import io.github.kmadsdev.consignado.domain.IncomeBelowCommittedMarginException;
 import io.github.kmadsdev.consignado.domain.MarginExceededException;
 import java.net.URI;
 import java.util.List;
@@ -50,6 +51,15 @@ class ApiExceptionHandler extends ResponseEntityExceptionHandler {
         ProblemDetail problem = problem(HttpStatus.UNPROCESSABLE_ENTITY, ex.code(), "Margin exceeded", ex.getMessage());
         problem.setProperty("availableMargin", ex.availableMargin());
         problem.setProperty("installment", ex.installment());
+        return problem;
+    }
+
+    @ExceptionHandler(IncomeBelowCommittedMarginException.class)
+    ProblemDetail incomeBelowCommittedMargin(IncomeBelowCommittedMarginException ex) {
+        ProblemDetail problem = problem(HttpStatus.UNPROCESSABLE_ENTITY, ex.code(), "Income below committed margin",
+                ex.getMessage());
+        problem.setProperty("marginLimit", ex.marginLimit());
+        problem.setProperty("committedInstallments", ex.committedInstallments());
         return problem;
     }
 

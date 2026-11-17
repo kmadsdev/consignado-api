@@ -12,10 +12,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.Callable;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
@@ -306,27 +302,5 @@ class ContractLifecycleIT extends ApiTestBase {
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
         assertThat(response.getHeaders().getContentType().toString()).startsWith("application/problem+json");
-    }
-
-    private static <T> List<T> runConcurrently(List<Callable<T>> calls) throws Exception {
-        ExecutorService pool = Executors.newFixedThreadPool(calls.size());
-        try {
-            CountDownLatch start = new CountDownLatch(1);
-            List<Future<T>> futures = new ArrayList<>();
-            for (Callable<T> call : calls) {
-                futures.add(pool.submit(() -> {
-                    start.await();
-                    return call.call();
-                }));
-            }
-            start.countDown();
-            List<T> results = new ArrayList<>();
-            for (Future<T> future : futures) {
-                results.add(future.get());
-            }
-            return results;
-        } finally {
-            pool.shutdownNow();
-        }
     }
 }
