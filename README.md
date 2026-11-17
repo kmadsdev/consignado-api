@@ -2,7 +2,7 @@
 
 A REST API for payroll-deducted loans (crédito consignado): employer agreements, customers, loan simulations with a Price amortization schedule, and the contract lifecycle up to settlement.
 
-This is a study project I built to practice backend design on a real banking product. It has no users and does not run in production.
+This is a study project I built to practice backend design on a real banking product. It has no real customers. A public demo of it runs on Azure with synthetic data only (see the Platform section).
 
 Leia em português: [README.pt-br.md](README.pt-br.md)
 
