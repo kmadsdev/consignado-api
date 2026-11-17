@@ -56,6 +56,14 @@ Notes for operation:
   is empty and the apply REMOVES the webhook from the action group (then the budget sends email only).
 - **Live window first.** An apply that changes a function app restarts it. Apply only when
   `curl -s https://consignado.kmads.dev/api/engine` shows `"activeSessions":0`.
+- **After an apply that changes a function app: remove `AzureWebJobsStorage` again.** The azurerm provider writes
+  `AzureWebJobsStorage` (and `DEPLOYMENT_STORAGE_CONNECTION_STRING`) as an account-KEY connection string on each update of a
+  Flex Consumption app. The value `""` in `functions.tf` is under `ignore_changes` (else every plan shows a diff), so it is not
+  sent again. The accounts refuse shared keys, so the host storage gets 403 ("Server failed to authenticate the request"):
+  the API host answers 500 and the gateway timer `reaper` stops. Seen 2026-11-17 21:03-21:12 UTC. Fix, once per changed app,
+  without printing the value:
+  `az functionapp config appsettings delete -g rg-consignado -n <app> --setting-names AzureWebJobsStorage`
+  The next plan still shows "No changes".
 - **Feature flags.** `enable_front_door` (default `false`), `enable_email`, `enable_budget`, `enable_function_vnet_integration` switch a part that the subscription refuses.
 - **Cloudflare ranges.** `gateway_allowed_cidrs` holds the list of `https://www.cloudflare.com/ips-v4` of 2026-11-17. When Cloudflare changes the list, change the variable and apply.
 - The subscription policy allows only `belgiumcentral`, `northcentralus`, `chilecentral`, `mexicocentral`, `southafricanorth`.
