@@ -85,7 +85,7 @@ Times are in the browser of the tester unless the row says otherwise.
 | Cluster stop | about 2 minutes | From the accepted ARM stop to `Stopped / Succeeded` in `az aks show`. |
 | Cluster start from `Stopped` | not verified at the time of writing | |
 
-Local numbers from before the deploy (Functions host image under emulation: cold start 11.2 s to 12.0 s) are kept in the `api-host` README of `consignado-serverless` and are not used on these pages.
+Local numbers from before the deploy (Functions host image under emulation: cold start 11.2 s to 12.0 s) are kept in the `api-host` README of `consignado-serverless`. They were too low: they do not include instance allocation and package mount on Azure.
 
 ## History
 
