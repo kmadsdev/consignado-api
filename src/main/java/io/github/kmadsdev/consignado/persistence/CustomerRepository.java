@@ -17,6 +17,8 @@ public interface CustomerRepository extends JpaRepository<Customer, UUID> {
      * {@code select ... for update} on the customer row. Approving a contract reads the
      * customer's committed installments and then adds one; without this lock two
      * approvals for the same customer could both pass the margin check (write skew).
+     * An income change takes the same lock, so it cannot lower the limit while an
+     * approval is deciding against the old one.
      */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select c from Customer c where c.id = :id")

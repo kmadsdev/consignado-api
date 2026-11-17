@@ -52,6 +52,11 @@ public class Customer {
         this.createdAt = now;
     }
 
+    /** The only field that changes after registration. The margin rule is checked by the use case. */
+    public void changeNetMonthlySalary(BigDecimal netMonthlySalary) {
+        this.netMonthlySalary = netMonthlySalary;
+    }
+
     public UUID getId() {
         return id;
     }
