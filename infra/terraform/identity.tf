@@ -103,6 +103,8 @@ locals {
       "gw-st-blob-owner"        = { scope = local.app_st, role = "Storage Blob Data Owner", principal = local.principal["gw"], type = "ServicePrincipal" } # host storage (AzureWebJobsStorage)
       "gw-aks-rbac-reader"      = { scope = local.aks_id, role = "Azure Kubernetes Service RBAC Reader", principal = local.principal["gw"], type = "ServicePrincipal" }
       "gw-cost-reader"          = { scope = azurerm_resource_group.main.id, role = "Cost Management Reader", principal = local.principal["gw"], type = "ServicePrincipal" }
+      # Live status (contract addendum part 1): metrics, resource health and resource state. Read-only.
+      "gw-monitoring-reader" = { scope = azurerm_resource_group.main.id, role = "Monitoring Reader", principal = local.principal["gw"], type = "ServicePrincipal" }
 
       # API host
       # Own storage account only (security review M4): no role on stconsigapp*.
