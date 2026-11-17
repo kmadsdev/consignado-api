@@ -61,7 +61,7 @@ Times are in the browser of the tester unless the row says otherwise.
 | Gateway through the edge | **Live, verified.** Health, engine state, masked snapshot, 401 without a token, guest preview. |
 | API on the serverless host | **Live, verified.** All operations through the site passed in the end-to-end test (9 calls, 0 failures). |
 | API on the AKS host behind the internal load balancer | **Live, verified.** Deployed by the CI job (OIDC, registry push, Azure RBAC, smoke test). All operations inside a real access window passed (10 calls, 0 failures). |
-| Deploy workflows | API (`ci.yml`, job `deploy`), gateway and site: green runs on 2026-11-17. API host workflow: the host serves live calls; a green run of the workflow after the runner download failure is not recorded in the sources. |
+| Deploy workflows | API (`ci.yml`, job `deploy`), gateway and site: green runs on 2026-11-17. API host workflow: both runs on 2026-11-17 ended with the deploy step marked failed (the zip was accepted, then the host key could not be fetched: the host storage fault of [lesson 6](operations.md#9-lessons-from-the-first-day)). The host serves live calls. A fully green run is not on record at the time of writing. |
 | Sign-up with an email one-time code, then sign-in | **Verified.** A real sign-up with a test mailbox passed: code mail in less than 5 s, then back on the site. |
 | Profile form with Turnstile | **Verified** in a visible browser. A headless browser is refused, as expected. |
 | Access rules | **Verified.** A user gets 403 on admin routes, 403 `no-session` on the AKS host without a ready window, 404 for another user's session, 405 for `PUT` on the proxy. |
