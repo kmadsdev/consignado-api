@@ -14,6 +14,7 @@ Leia em português: [README.pt-br.md](README.pt-br.md)
 
 The same jar runs as pods on AKS and inside an Azure Function, behind a Java gateway and a Cloudflare edge, at <https://consignado.kmads.dev>.
 The AKS cluster is stopped by default; a signed-in user starts it for a 15-minute access window.
+Live since 2026-11-17. Measured through the edge: serverless host 18.6 to 18.9 s cold and 0.25 to 0.9 s warm; Kubernetes host about 0.76 s warm. The start of a stopped cluster was not verified at the time of writing.
 
 - Start here: [docs/platform/README.md](docs/platform/README.md) (what is live, what is not verified)
 - [Architecture diagrams](docs/platform/architecture.md) · [Decisions](docs/platform/decisions.md) · [Runbook](docs/platform/operations.md)
@@ -122,9 +123,9 @@ Configuration (environment variables): `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`. A
 
 ## Deployment
 
-`deploy/k8s` holds the Kubernetes manifests and `deploy/render.sh` fills their `${VAR}` placeholders (`IMAGE`, `APP_CLIENT_ID`, `TENANT_ID`, `KV`, `PG_HOST`, `PG_DB`, `PG_ADMIN`; none is a secret). The Service is an internal Azure load balancer with the fixed private IP `10.10.3.200`, so the API has no public address. The database password comes from Key Vault through workload identity and the Secrets Store CSI driver.
+`deploy/k8s` holds the Kubernetes manifests and `deploy/render.sh` fills their `${VAR}` placeholders (`IMAGE`, `APP_CLIENT_ID`, `TENANT_ID`, `KV`, `PG_HOST`, `PG_DB`, `PG_ADMIN`; none is a secret). The Service is an internal Azure load balancer with a fixed private address (`deploy/k8s/50-service.yaml`), so the API has no public address. The database password comes from Key Vault through workload identity and the Secrets Store CSI driver.
 
-The `deploy` job in `.github/workflows/ci.yml` runs on a push to `main`: OIDC login, image to the registry, start the cluster when it is stopped, `kubelogin` (Entra ID with Azure RBAC, no local account), apply, rollout, a smoke test inside the cluster, and a check of the load balancer IP. It never stops the cluster; the gateway's timer does. The reasons are in [ADR 0007](docs/adr/0007-two-hosts-one-api.md).
+The `deploy` job in `.github/workflows/ci.yml` runs on a push to `main`: OIDC login, image to the registry, start the cluster when it is stopped, `kubelogin` (Entra ID with Azure RBAC, no local account), apply, rollout, a smoke test inside the cluster, and a check of the load balancer IP. It never stops the cluster; the gateway's timer does. The image is built with the official Maven image, because the Maven wrapper download failed on the runners. The job has rights in the namespace `consignado` only; the cluster admin creates the namespace once with `WITH_NAMESPACE=1 ./deploy/render.sh | kubectl apply -f -`. The reasons are in [ADR 0007](docs/adr/0007-two-hosts-one-api.md).
 
 ## API examples
 

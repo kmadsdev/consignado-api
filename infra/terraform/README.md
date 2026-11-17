@@ -42,9 +42,12 @@ Notes for operation:
   Add new settings in `functions.tf`.
 - **PostgreSQL region.** If `Standard_B1ms` has no capacity (`RegionalAllocationFailed`), set `-var pg_location=<other allowed region>`.
   A failed create reserves the server name in the first region for some time: also set `-var pg_server_name=psql-consignado-km01-<n>`.
-- **Budget webhook.** `-var budget_webhook_url=https://...` adds the gateway webhook to the action group. Empty = email only.
+- **Budget webhook: set `TF_VAR_budget_webhook_url` before every plan and apply.** The URL holds a function key, so it is in no file.
+  Empty = email only: **an apply without the variable removes the live webhook** from the action group. The live value has the form
+  `https://consignado.kmads.dev/api/hooks/budget?code=<function key of budgetHook>`. Export it from your secret store in the same shell; do not print it.
 - **Feature flags.** `enable_front_door` (default `false`), `enable_email`, `enable_budget`, `enable_function_vnet_integration` switch a part that the subscription refuses.
 - **Cloudflare ranges.** `gateway_allowed_cidrs` holds the list of `https://www.cloudflare.com/ips-v4` of 2026-11-17. When Cloudflare changes the list, change the variable and apply.
+- **Tables** are made by an ARM deployment (`consignado-tables`): `azurerm_storage_table` needs the account key, and the account accepts none.
 - The subscription policy allows only `belgiumcentral`, `northcentralus`, `chilecentral`, `mexicocentral`, `southafricanorth`.
 
 ## Files
@@ -56,7 +59,7 @@ Notes for operation:
 | `main.tf` | Resource group, tags, shared locals. |
 | `network.tf` | `vnet-consignado`, `snet-aks`, `snet-func`. |
 | `aks.tf` | Registry and AKS cluster. |
-| `data.tf` | PostgreSQL, Key Vault and its secrets (`db-password`, `edge-key`), the two storage accounts, containers, tables. |
+| `data.tf` | PostgreSQL, Key Vault and its secrets (`db-password`, `edge-key`, `hash-key`), the two storage accounts, containers, tables. |
 | `functions.tf` | The two Flex Consumption function apps and their plans. |
 | `edge.tf` + `modules/edge/` | Front Door profile, endpoint, origins, routes, rule sets, custom domains, WAF. Off (`enable_front_door = false`). The one module of this stack: it lets one flag switch 18 resources. |
 | `identity.tf` | Managed identities, federated credentials, all role assignments, the custom role, Entra app registrations. |
@@ -68,10 +71,10 @@ Notes for operation:
 | Thing | Name | Region | Notes |
 |---|---|---|---|
 | Resource group | `rg-consignado` | belgiumcentral | Tags `project=consignado`, `managed-by=terraform` on every resource. |
-| Virtual network | `vnet-consignado` 10.10.0.0/16 | belgiumcentral | `snet-aks` 10.10.0.0/22; `snet-func` 10.10.8.0/24 (delegation `Microsoft.App/environments`, service endpoint `Microsoft.Web`). |
-| AKS | `aks-consignado` | belgiumcentral | Free tier, 1 x `Standard_D2as_v4`, Azure CNI overlay (pods 10.244.0.0/16, services 10.0.0.0/16), OIDC issuer, workload identity, Key Vault CSI add-on, Entra ID + Azure RBAC, local accounts off, managed OS disk 32 GB. |
+| Virtual network | `vnet-consignado` | belgiumcentral | Subnets `snet-aks` and `snet-func` (delegation `Microsoft.App/environments`, service endpoint `Microsoft.Web`). Address ranges: `network.tf`. |
+| AKS | `aks-consignado` | belgiumcentral | Free tier, 1 x `Standard_D2as_v4`, Azure CNI overlay (pod and service ranges in `aks.tf`), OIDC issuer, workload identity, Key Vault CSI add-on, Entra ID + Azure RBAC, local accounts off, managed OS disk 32 GB. |
 | Registry | `crconsignadokm01` | belgiumcentral | Basic, admin user off. |
-| Key Vault | `kv-consig-km01` | belgiumcentral | RBAC mode. Secrets `db-password` and `edge-key` (Terraform). `apifn-host-key`, `turnstile-secret`: the integrator. |
+| Key Vault | `kv-consig-km01` | belgiumcentral | RBAC mode. Secrets `db-password`, `edge-key` and `hash-key` (Terraform). `apifn-host-key` (piped from the API host keys, see the runbook) and `turnstile-secret`: set by hand. |
 | PostgreSQL | `psql-consignado-km01` | northcentralus (`pg_location`) | Flexible server `B_Standard_B1ms`, v16, 32 GB, database `consignado`, admin `pgadmin`, public endpoint + rule `AllowAllAzureServices`. |
 | Storage (site) | `stconsigwebkm01` | belgiumcentral | Static website (`index.html`, error document `index.html`), no account key. |
 | Storage (app) | `stconsigappkm01` | belgiumcentral | Containers `deploy-gateway`, `deploy-api`, `data`; tables `users`, `sessions`, `engine`, `contacts`, `audit` (ARM deployment `consignado-tables`); no account key. |
@@ -104,7 +107,8 @@ Notes for operation:
 | `id-consignado-apifn` | Storage Blob Data Owner (host and deployment storage) | `stconsigappkm01` |
 | API host, system-assigned identity | Key Vault Secrets User (Key Vault reference of `DB_PASSWORD`) | Key Vault |
 | `id-consignado-github` | AcrPush | registry |
-| `id-consignado-github` | Azure Kubernetes Service Cluster User Role, Azure Kubernetes Service RBAC Writer, Consignado Engine Operator | cluster |
+| `id-consignado-github` | Azure Kubernetes Service Cluster User Role, Consignado Engine Operator | cluster |
+| `id-consignado-github` | Azure Kubernetes Service RBAC Admin | namespace `consignado` only (the cluster admin creates the namespace once) |
 | `id-consignado-github` | Website Contributor | both function apps |
 | `id-consignado-github` | Storage Blob Data Contributor | `stconsigappkm01`, `stconsigwebkm01` |
 | `id-consignado-github` | CDN Endpoint Contributor (purge) | Front Door profile: only when `enable_front_door = true` (not assigned now) |
@@ -154,18 +158,20 @@ With Front Door Standard (+35.00) the fixed cost would be about 66 to 70: higher
   Private Link origins, but costs US$330 per month. Standard supports custom WAF rules only; that is why the WAF has only
   rate-limit rules. The gateway accepts only the `AzureFrontDoor.Backend` service tag with the `X-Azure-FDID` header of this
   profile, so a different Front Door profile cannot reach it.
-- **Internal load balancer.** The AKS service has no public IP. Kubernetes creates an internal load balancer with the fixed IP
-  `10.10.3.200` in `snet-aks`; only the VNet can reach it, and the gateway is in the VNet (`snet-func`). The cluster identity has
+- **Internal load balancer.** The AKS service has no public IP. Kubernetes creates an internal load balancer with a fixed
+  private address in `snet-aks` (set in `deploy/k8s` and in the gateway setting `AKS_INTERNAL_URL`); only the VNet can reach it, and the gateway is in the VNet (`snet-func`). The cluster identity has
   `Network Contributor` on `snet-aks` for this. Terraform does not create the load balancer: the Service manifest in `deploy/k8s` does.
 - **Database with a public endpoint and the Azure-services rule.** Owner's decision for cost. A private endpoint costs about
   US$7 per month plus a private DNS zone, and VNet injection of the server makes the API host function app need VNet integration
   and a cross-region link (the server is in `northcentralus`). Protection that stays: TLS is required, the password has 28
-  random characters and is only in Key Vault, and the firewall rule 0.0.0.0 admits only addresses of Azure, not the internet.
+  random characters and is only in Key Vault, and the firewall rule `AllowAllAzureServices` admits only addresses of Azure, not the internet.
   The weak point: any Azure tenant can reach the port, so the password is the real control.
 - **Azure RBAC for Kubernetes.** One system of permissions (Azure role assignments, in this Terraform) for people, the
   gateway and CI. No kubeconfig with a client certificate exists (`local_account_disabled = true`), so nothing can leak
-  from a file. Each caller gets a token from Entra ID: the gateway reads (`RBAC Reader`), CI deploys (`RBAC Writer`),
-  the owner is `RBAC Cluster Admin`. `kubectl` needs `kubelogin`.
+  from a file. Each caller gets a token from Entra ID: the gateway reads (`RBAC Reader`; it cannot list nodes, so it reads pods),
+  CI deploys (`RBAC Admin` on the namespace `consignado` only: `RBAC Writer` cannot change a `SecretProviderClass`),
+  the owner is `RBAC Cluster Admin` and creates the namespace once (`WITH_NAMESPACE=1 ./deploy/render.sh | kubectl apply -f -`).
+  `kubectl` needs `kubelogin`.
 - **OS disk of the node: managed, 32 GB.** An ephemeral OS disk (48 GB in the 50 GiB cache of `Standard_D2as_v4`) has no
   disk cost. The Microsoft documentation for cluster stop/start (`learn.microsoft.com/azure/aks/start-stop-cluster`, read
   2026-11-17) does not list ephemeral OS disks as a limit, but it also does not say that they are supported; only the
@@ -178,6 +184,9 @@ With Front Door Standard (+35.00) the fixed cost would be about 66 to 70: higher
   has a system-assigned identity too, with `Key Vault Secrets User`.
 - **Host storage of the function apps.** `AzureWebJobsStorage__accountName` + `__credential=managedidentity` + `__clientId`:
   no connection string. The host needs `Storage Blob Data Owner`, so both function identities have it on `stconsigappkm01`.
+  The provider adds `AzureWebJobsStorage` with an account key by default; the account refuses shared keys, and with the
+  identity-based settings that setting must not be used. So `functions.tf` sets `AzureWebJobsStorage = ""` with `ignore_changes`
+  (without it the hosts got 403 on their storage on 2026-11-17).
 - **No NAT gateway.** `snet-func` keeps the default outbound access of Azure (a NAT gateway costs about US$32 per month).
 - **No health probe on the origins.** One origin per group: a probe changes nothing, and it would keep the function app awake.
 - **App registrations.** `sign_in_audience` is a variable (`entra_sign_in_audience`, default `AzureADMyOrg`); user flows and
