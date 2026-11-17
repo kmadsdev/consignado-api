@@ -132,6 +132,12 @@ resource "azurerm_function_app_flex_consumption" "gateway" {
     API_APP_ID     = azurerm_function_app_flex_consumption.api.id
     KEY_VAULT_ID   = azurerm_key_vault.main.id
     POSTGRES_ID    = azurerm_postgresql_flexible_server.main.id
+    APPINSIGHTS_ID = azurerm_application_insights.main.id
+
+    # Token check: only tokens issued to the SPA client (security review L5).
+    ENTRA_SPA_CLIENT_ID = azuread_application.spa.client_id
+    # Turnstile answer: its `hostname` must be one of the two site hosts (security review L4).
+    TURNSTILE_HOSTNAMES = join(",", [var.custom_domains["consignado"], var.custom_domains["cluster-consignado"]])
   }, local.email_settings)
 
   # The provider does not read AzureWebJobsStorage back, so the empty value above would show a change in every plan.
