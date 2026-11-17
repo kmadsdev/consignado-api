@@ -21,8 +21,9 @@ import org.springframework.web.filter.OncePerRequestFilter;
  * token, a new UUID otherwise. The id goes into the MDC (so every log line carries it),
  * into the response header, into problem responses and into outbox events.
  *
- * <p>Logs one line per request with method, path, status and duration. The query string
- * is not logged.
+ * <p>Logs one line per request with method, path, status and duration, and the timing
+ * numbers of {@link RequestTimingFilter} (application time, statements by kind, database
+ * time). The query string and SQL are not logged.
  */
 @Component
 @Order(Ordered.HIGHEST_PRECEDENCE)
@@ -45,8 +46,10 @@ public class CorrelationIdFilter extends OncePerRequestFilter {
             chain.doFilter(request, response);
         } finally {
             if (!request.getRequestURI().startsWith("/actuator")) {
-                log.info("http {} {} status={} durationMs={}", request.getMethod(), request.getRequestURI(),
-                        response.getStatus(), TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start));
+                Object timing = request.getAttribute(RequestTimingFilter.SNAPSHOT_ATTRIBUTE);
+                log.info("http {} {} status={} durationMs={}{}", request.getMethod(), request.getRequestURI(),
+                        response.getStatus(), TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start),
+                        timing instanceof RequestTiming.Snapshot snapshot ? " " + snapshot.logFields() : "");
             }
             MDC.remove(MDC_KEY);
         }

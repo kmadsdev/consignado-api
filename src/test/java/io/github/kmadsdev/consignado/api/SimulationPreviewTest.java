@@ -2,9 +2,11 @@ package io.github.kmadsdev.consignado.api;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.hasItem;
+import static org.hamcrest.Matchers.matchesPattern;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -142,6 +144,15 @@ class SimulationPreviewTest {
                 .andExpect(jsonPath("$.totalElements").value(0));
         mvc.perform(get("/api/v1/simulations").param("size", "101"))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void theTimingHeadersSayNoStatementRan() throws Exception {
+        preview("{\"principal\": 10000.00, \"termMonths\": 12, \"monthlyInterestRate\": 0.015}")
+                .andExpect(status().isOk())
+                .andExpect(header().string("Server-Timing", matchesPattern("app;dur=\\d+\\.\\d")))
+                .andExpect(header().string("X-Consignado-Timing",
+                        matchesPattern("\\{\"instance\":\"[A-Za-z0-9._-]+\",\"appMs\":\\d+\\.\\d,\"db\":null}")));
     }
 
     private ResultActions preview(String body) throws Exception {
