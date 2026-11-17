@@ -2,6 +2,7 @@
 
 - Status: accepted
 - Date: 2026-11-17
+- Updated: 2026-11-17, after the first live day
 
 ## Context
 
@@ -19,10 +20,11 @@ The DNS zone of the domain was already at Cloudflare.
 
 **The edge is one Cloudflare Worker, `consignado-edge`,** on `consignado.kmads.dev` and `cluster.consignado.kmads.dev`. Its code is in `kmadsdev/consignado-front`, folder `edge/`.
 
-- `/api/*` goes to the gateway. It is never cached. Only `GET`, `POST`, `PUT` and `PATCH` pass, and a body larger than 64 KB is refused. The Worker forwards five request headers and drops the rest.
+- `/api/*` goes to the gateway. It is never cached. Only `GET`, `POST`, `PUT` and `PATCH` pass, and a body larger than 64 KB is refused. The Worker forwards six request headers and drops the rest.
 - Every other path goes to the static website in Blob Storage. A path with no file extension is served as `index.html`. Files under `/assets/` are cached for one year.
 - The Worker sets the security headers: HSTS, a content security policy, no framing, no content sniffing.
 - The Worker takes no access decision and holds no user data. Tokens and quotas are checked by the gateway.
+- Zone rules, scoped to the two host names, run before the Worker: a rate limit of 40 requests per 10 seconds per IP address on `/api/`, a method allow-list, and a managed challenge for non-browser clients on `/api/contact` and `/api/me/profile`.
 
 **Two controls replace the Front Door origin lock.**
 
@@ -35,11 +37,11 @@ The Front Door code stays in `infra/terraform/modules/edge` behind the flag `ena
 
 - The edge costs nothing (free plan, 100 000 requests per day) and gives TLS for both host names, a cache and network-level DDoS protection.
 - One part of the request path is not Azure. The story "everything on Azure" is no longer true, and the page says so.
-- **No managed WAF rule set.** The free plan gives custom rules and rate limits, not the managed rule sets. Which rules are configured in the Cloudflare zone is not recorded in the reports.
+- **No managed WAF rule set.** The free plan gives custom rules and rate limits, not the managed rule sets. The zone rules above are set in Cloudflare, not in a repository. A method refused by a zone rule gets the Cloudflare HTML block page, not the JSON error of the API.
 - The edge key is a shared secret, the only one that leaves Azure. A rotation must change Key Vault and the Worker together; the gateway caches the key for 5 minutes.
 - The Cloudflare address list is a Terraform variable. When Cloudflare changes the list, someone must update it by hand.
 - The Worker is deployed by hand, because a Cloudflare token is not stored in the repository.
-- Verified live: a direct call to the gateway from an address that is not Cloudflare gets 403. Not verified when this ADR was written: the Worker on the two host names, and a full request through it.
+- Verified live: a direct call to the gateway from an address that is not Cloudflare gets 403; both host names serve through the Worker with valid certificates; full requests of guests and signed-in users pass through it.
 
 ## What a bank would add
 
