@@ -125,6 +125,13 @@ resource "azurerm_function_app_flex_consumption" "gateway" {
     BUDGET_LIMIT_USD    = tostring(var.budget_amount)
     AZURE_SUBSCRIPTION  = var.subscription_id
     AZURE_RESOURCEGROUP = local.rg_name
+
+    # Live status (contract addendum part 1): resources that the gateway reads from Azure Monitor and ARM.
+    # The own id is built from the names (a reference to this resource would be a cycle).
+    GATEWAY_APP_ID = "${azurerm_resource_group.main.id}/providers/Microsoft.Web/sites/${local.gateway_app_name}"
+    API_APP_ID     = azurerm_function_app_flex_consumption.api.id
+    KEY_VAULT_ID   = azurerm_key_vault.main.id
+    POSTGRES_ID    = azurerm_postgresql_flexible_server.main.id
   }, local.email_settings)
 
   # The provider does not read AzureWebJobsStorage back, so the empty value above would show a change in every plan.
