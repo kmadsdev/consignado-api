@@ -44,27 +44,27 @@ Fiquei no Spring Boot 3.5 em vez do 4.x nesta primeira versão porque é a linha
 
 ```mermaid
 flowchart LR
-    client([cliente HTTP])
+    client(["cliente HTTP"])
 
-    subgraph app[consignado-api]
-        filter[CorrelationIdFilter]
-        api[api<br/>controllers, validação,<br/>problem details]
-        application[application<br/>casos de uso, read models]
-        domain[domain<br/>Cpf, PriceAmortization,<br/>MarginPolicy, ContractStatus]
-        persistence[persistence<br/>entidades JPA, repositórios]
-        outbox[outbox<br/>writer, relay,<br/>porta EventPublisher]
-        observability[observability<br/>métricas, logs JSON]
+    subgraph app["consignado-api"]
+        filter["CorrelationIdFilter"]
+        api["api<br/>controllers, validação,<br/>problem details"]
+        application["application<br/>casos de uso, read models"]
+        domain["domain<br/>Cpf, PriceAmortization,<br/>MarginPolicy, ContractStatus"]
+        persistence["persistence<br/>entidades JPA, repositórios"]
+        outbox["outbox<br/>writer, relay,<br/>porta EventPublisher"]
+        observability["observability<br/>métricas, logs JSON"]
     end
 
-    db[(PostgreSQL)]
-    channel[[canal de mensagens<br/>hoje: adapter de log]]
+    db[("PostgreSQL")]
+    channel[["canal de mensagens<br/>hoje: adapter de log"]]
 
     client --> filter --> api --> application
     application --> domain
     application --> persistence --> db
     application --> outbox
-    outbox -->|mesma transação| db
-    outbox -->|relay a cada 2 s| channel
+    outbox -->|"mesma transação"| db
+    outbox -->|"relay a cada 2 s"| channel
     application --> observability
 ```
 

@@ -44,27 +44,27 @@ I chose Spring Boot 3.5 over 4.x for this first version because it is the line I
 
 ```mermaid
 flowchart LR
-    client([HTTP client])
+    client(["HTTP client"])
 
-    subgraph app[consignado-api]
-        filter[CorrelationIdFilter]
-        api[api<br/>controllers, validation,<br/>problem details]
-        application[application<br/>use cases, read models]
-        domain[domain<br/>Cpf, PriceAmortization,<br/>MarginPolicy, ContractStatus]
-        persistence[persistence<br/>JPA entities, repositories]
-        outbox[outbox<br/>writer, relay,<br/>EventPublisher port]
-        observability[observability<br/>metrics, JSON logs]
+    subgraph app["consignado-api"]
+        filter["CorrelationIdFilter"]
+        api["api<br/>controllers, validation,<br/>problem details"]
+        application["application<br/>use cases, read models"]
+        domain["domain<br/>Cpf, PriceAmortization,<br/>MarginPolicy, ContractStatus"]
+        persistence["persistence<br/>JPA entities, repositories"]
+        outbox["outbox<br/>writer, relay,<br/>EventPublisher port"]
+        observability["observability<br/>metrics, JSON logs"]
     end
 
-    db[(PostgreSQL)]
-    channel[[message channel<br/>today: log adapter]]
+    db[("PostgreSQL")]
+    channel[["message channel<br/>today: log adapter"]]
 
     client --> filter --> api --> application
     application --> domain
     application --> persistence --> db
     application --> outbox
-    outbox -->|same transaction| db
-    outbox -->|relay, every 2 s| channel
+    outbox -->|"same transaction"| db
+    outbox -->|"relay, every 2 s"| channel
     application --> observability
 ```
 
