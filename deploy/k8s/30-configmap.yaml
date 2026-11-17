@@ -1,0 +1,10 @@
+# Non-secret configuration. The application reads DB_URL and DB_USERNAME
+# (src/main/resources/application.yml). Azure PostgreSQL requires TLS.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: consignado-api
+  namespace: consignado
+data:
+  DB_URL: "jdbc:postgresql://${PG}.postgres.database.azure.com:5432/${PG_DB}?sslmode=require"
+  DB_USERNAME: "${PG_ADMIN}"
