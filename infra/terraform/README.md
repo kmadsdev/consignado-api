@@ -20,12 +20,13 @@ cd infra/terraform
 #    role "Storage Blob Data Contributor" for the signed-in user.
 ./bootstrap.sh
 
-# 2. Each change
-terraform init
+# 2. Each change. ALWAYS set the budget webhook first, in the same shell (it is in no file; see the note below).
+export TF_VAR_budget_webhook_url="https://consignado.kmads.dev/api/hooks/budget?code=$(az functionapp function keys list -g rg-consignado -n func-consignado-gw-km01 --function-name budgetHook --query default -o tsv)"
+terraform init -input=false
 terraform fmt -check && terraform validate
 terraform plan -out=tfplan
 terraform apply tfplan
-terraform output -json > outputs.json      # commit this file (no secret is an output)
+terraform output -json > outputs.json      # commit this file (no secret, no tenant / subscription / person id is an output)
 
 # 3. Remove everything of the platform (NOT the state storage, NOT rg-consignado-lab)
 terraform destroy
@@ -42,7 +43,12 @@ Notes for operation:
   Add new settings in `functions.tf`.
 - **PostgreSQL region.** If `Standard_B1ms` has no capacity (`RegionalAllocationFailed`), set `-var pg_location=<other allowed region>`.
   A failed create reserves the server name in the first region for some time: also set `-var pg_server_name=psql-consignado-km01-<n>`.
-- **Budget webhook.** `-var budget_webhook_url=https://...` adds the gateway webhook to the action group. Empty = email only.
+- **Budget webhook: `TF_VAR_budget_webhook_url` on EVERY plan and apply.** The action group `ag-consignado-budget` calls the
+  gateway through the edge (`https://consignado.kmads.dev/api/hooks/budget?code=<function key>`). The URL holds a function key,
+  so it is in no file: set it with the `export` line in step 2, in the same shell, and never print it. Without it, the variable
+  is empty and the apply REMOVES the webhook from the action group (then the budget sends email only).
+- **Live window first.** An apply that changes a function app restarts it. Apply only when
+  `curl -s https://consignado.kmads.dev/api/engine` shows `"activeSessions":0`.
 - **Feature flags.** `enable_front_door` (default `false`), `enable_email`, `enable_budget`, `enable_function_vnet_integration` switch a part that the subscription refuses.
 - **Cloudflare ranges.** `gateway_allowed_cidrs` holds the list of `https://www.cloudflare.com/ips-v4` of 2026-11-17. When Cloudflare changes the list, change the variable and apply.
 - The subscription policy allows only `belgiumcentral`, `northcentralus`, `chilecentral`, `mexicocentral`, `southafricanorth`.
@@ -56,7 +62,7 @@ Notes for operation:
 | `main.tf` | Resource group, tags, shared locals. |
 | `network.tf` | `vnet-consignado`, `snet-aks`, `snet-func`. |
 | `aks.tf` | Registry and AKS cluster. |
-| `data.tf` | PostgreSQL, Key Vault and its secrets (`db-password`, `edge-key`), the two storage accounts, containers, tables. |
+| `data.tf` | PostgreSQL, Key Vault and its secrets (`db-password`, `edge-key`, `hash-key`), the three storage accounts, containers, tables. |
 | `functions.tf` | The two Flex Consumption function apps and their plans. |
 | `edge.tf` + `modules/edge/` | Front Door profile, endpoint, origins, routes, rule sets, custom domains, WAF. Off (`enable_front_door = false`). The one module of this stack: it lets one flag switch 18 resources. |
 | `identity.tf` | Managed identities, federated credentials, all role assignments, the custom role, Entra app registrations. |
@@ -71,13 +77,14 @@ Notes for operation:
 | Virtual network | `vnet-consignado` 10.10.0.0/16 | belgiumcentral | `snet-aks` 10.10.0.0/22; `snet-func` 10.10.8.0/24 (delegation `Microsoft.App/environments`, service endpoint `Microsoft.Web`). |
 | AKS | `aks-consignado` | belgiumcentral | Free tier, 1 x `Standard_D2as_v4`, Azure CNI overlay (pods 10.244.0.0/16, services 10.0.0.0/16), OIDC issuer, workload identity, Key Vault CSI add-on, Entra ID + Azure RBAC, local accounts off, managed OS disk 32 GB. |
 | Registry | `crconsignadokm01` | belgiumcentral | Basic, admin user off. |
-| Key Vault | `kv-consig-km01` | belgiumcentral | RBAC mode. Secrets `db-password` and `edge-key` (Terraform). `apifn-host-key`, `turnstile-secret`: the integrator. |
+| Key Vault | `kv-consig-km01` | belgiumcentral | RBAC mode, soft delete 7 days, purge protection on (since 2026-11-17; it cannot be turned off). Secrets `db-password` and `edge-key` (Terraform). `apifn-host-key`, `turnstile-secret`: the integrator. |
 | PostgreSQL | `psql-consignado-km01` | northcentralus (`pg_location`) | Flexible server `B_Standard_B1ms`, v16, 32 GB, database `consignado`, admin `pgadmin`, public endpoint + rule `AllowAllAzureServices`. |
 | Storage (site) | `stconsigwebkm01` | belgiumcentral | Static website (`index.html`, error document `index.html`), no account key. |
-| Storage (app) | `stconsigappkm01` | belgiumcentral | Containers `deploy-gateway`, `deploy-api`, `data`; tables `users`, `sessions`, `engine`, `contacts`, `audit` (ARM deployment `consignado-tables`); no account key. |
+| Storage (app) | `stconsigappkm01` | belgiumcentral | Gateway only: host storage, containers `deploy-gateway`, `data`; tables `users`, `sessions`, `engine`, `contacts`, `audit` (ARM deployment `consignado-tables`); no account key. Container `deploy-api` is the OLD API host package (not used since 2026-11-17; delete it after the new one is proved). |
+| Storage (API host) | `stconsigapifnkm01` | belgiumcentral | API host only: host storage and container `deploy-api` (deployment package). No account key, no public blob access, TLS 1.2. Security review M4: the API host identity cannot write the gateway package. |
 | Monitoring | `log-consignado`, `appi-consignado` | belgiumcentral | Daily cap 1 GB, 30 days. |
-| Gateway | `func-consignado-gw-km01` (plan `asp-consignado-gw-km01`) | belgiumcentral | Flex Consumption, Java 21, 2048 MB, max 4 instances, VNet integration `snet-func`, inbound: the 15 Cloudflare IPv4 ranges only, all other sources denied (with Front Door: `AzureFrontDoor.Backend` + `X-Azure-FDID`). |
-| API host | `func-consignado-api-km01` (plan `asp-consignado-api-km01`) | belgiumcentral | Flex Consumption, runtime `custom`, 2048 MB, max 4 instances, inbound: `snet-func` only. |
+| Gateway | `func-consignado-gw-km01` (plan `asp-consignado-gw-km01`) | belgiumcentral | Flex Consumption, Java 21, 2048 MB, max 2 instances (`gateway_max_instances`), VNet integration `snet-func`, inbound: the 15 Cloudflare IPv4 ranges only, all other sources denied (with Front Door: `AzureFrontDoor.Backend` + `X-Azure-FDID`). |
+| API host | `func-consignado-api-km01` (plan `asp-consignado-api-km01`) | belgiumcentral | Flex Consumption, runtime `custom`, 2048 MB, max 1 instance (`api_host_max_instances`), inbound: `snet-func` only. Storage: `stconsigapifnkm01`. |
 | Front Door (**not created, refused**) | `afd-consignado` (Standard), endpoint `consignado-km01` | global | Routes `/api/*` -> gateway (no cache), `/*` -> static site (cache + SPA rewrite); security headers; 2 custom domains with managed certificates. |
 | WAF (**not created, refused**) | `wafconsignado` | global | Prevention. Rate limits per client IP: 120/min on `/api/`, 600/min on all paths. |
 | Email | `acs-consignado-km01`, `acs-email-consignado-km01`, `AzureManagedDomain` | global (data: Europe) | Sender `DoNotReply@<guid>.azurecomm.net`. |
@@ -99,14 +106,15 @@ Notes for operation:
 | `id-consignado-gw` | Storage Table Data Contributor, Storage Blob Data Contributor, Storage Blob Data Owner (host storage) | `stconsigappkm01` |
 | `id-consignado-gw` | Consignado Engine Operator, Azure Kubernetes Service RBAC Reader | cluster |
 | `id-consignado-gw` | Cost Management Reader | `rg-consignado` |
+| `id-consignado-gw` | Monitoring Reader (live status: metrics, resource health, resource state; read-only) | `rg-consignado` |
 | `id-consignado-gw` | Communication and Email Service Owner | `acs-consignado-km01` |
 | `id-consignado-apifn` | Key Vault Secrets User | Key Vault |
-| `id-consignado-apifn` | Storage Blob Data Owner (host and deployment storage) | `stconsigappkm01` |
+| `id-consignado-apifn` | Storage Blob Data Owner (host and deployment storage) | `stconsigapifnkm01` only (no role on `stconsigappkm01`) |
 | API host, system-assigned identity | Key Vault Secrets User (Key Vault reference of `DB_PASSWORD`) | Key Vault |
 | `id-consignado-github` | AcrPush | registry |
 | `id-consignado-github` | Azure Kubernetes Service Cluster User Role, Azure Kubernetes Service RBAC Writer, Consignado Engine Operator | cluster |
 | `id-consignado-github` | Website Contributor | both function apps |
-| `id-consignado-github` | Storage Blob Data Contributor | `stconsigappkm01`, `stconsigwebkm01` |
+| `id-consignado-github` | Storage Blob Data Contributor | `stconsigappkm01`, `stconsigapifnkm01`, `stconsigwebkm01` |
 | `id-consignado-github` | CDN Endpoint Contributor (purge) | Front Door profile: only when `enable_front_door = true` (not assigned now) |
 
 ## Cost per month
@@ -127,7 +135,7 @@ A month = 730 hours. Lines with **(estimate)** depend on use.
 | AKS control plane | 0 | 0 | Free tier. |
 | AKS node `Standard_D2as_v4` | 0.104 / hour | 0 | Only while the cluster runs: 0.026 for one 15-minute window. 100 windows = 2.60. 730 hours = 75.92 (never leave it on). |
 | Function apps (Flex Consumption, on demand) | 0.000034 / GB-second, 0.0000005 / execution | **(estimate)** 0 to 1 | Monthly free grant (100 000 GB-seconds, 250 000 executions). No always-ready instances. |
-| Storage (3 accounts, LRS, hot) | 0.018 / GB-month | **(estimate)** < 0.50 | Site, deployment packages, tables, Terraform state. |
+| Storage (4 accounts, LRS, hot) | 0.018 / GB-month | **(estimate)** < 0.50 | Site, deployment packages, tables, Terraform state. |
 | Key Vault Standard | per 10 000 operations | **(estimate)** < 0.10 | |
 | Log Analytics / Application Insights | 2.99 / GB ingested | **(estimate)** 0 to 3 | The first 5 GB per month are free; daily cap 1 GB. |
 | Communication Services email | per message | **(estimate)** < 0.10 | |
@@ -177,7 +185,19 @@ With Front Door Standard (+35.00) the fixed cost would be about 66 to 70: higher
   `key_vault_reference_identity_id`. The platform then resolves references with the system-assigned identity, so the API host
   has a system-assigned identity too, with `Key Vault Secrets User`.
 - **Host storage of the function apps.** `AzureWebJobsStorage__accountName` + `__credential=managedidentity` + `__clientId`:
-  no connection string. The host needs `Storage Blob Data Owner`, so both function identities have it on `stconsigappkm01`.
+  no connection string. The host needs `Storage Blob Data Owner`. Each app has its own account (security review M4,
+  2026-11-17): the gateway on `stconsigappkm01`, the API host on `stconsigapifnkm01`. Before, both shared `stconsigappkm01`,
+  so code in the API host could replace the gateway package and run as the gateway identity.
+- **Scale caps (security review M3, 2026-11-17).** Anonymous visitors reach both apps through the guest route
+  `POST /api/fn/api/v1/simulations/preview`. The caps limit that spend: gateway 2 instances, API host 1 instance,
+  2048 MB each (variables `gateway_max_instances`, `api_host_max_instances`; before: 4 for both).
+- **Gateway live status (contract addendum part 1).** The gateway identity has `Monitoring Reader` on `rg-consignado`,
+  and the gateway app settings `GATEWAY_APP_ID`, `API_APP_ID`, `KEY_VAULT_ID`, `POSTGRES_ID` hold the resource ids it reads.
+  `GATEWAY_APP_ID` is built from the resource group id and the name (a reference to the app itself is a cycle).
+  The ids are not secrets, but they are not outputs: they hold the subscription id.
+- **Outputs in a public repository (security review I4, 2026-11-17).** `outputs.json` holds names, host names and client
+  ids only: no tenant id, no subscription id, no object id of a person, no ARM resource id. These values are not secrets;
+  older versions of the file in the git history still show them.
 - **No NAT gateway.** `snet-func` keeps the default outbound access of Azure (a NAT gateway costs about US$32 per month).
 - **No health probe on the origins.** One origin per group: a probe changes nothing, and it would keep the function app awake.
 - **App registrations.** `sign_in_audience` is a variable (`entra_sign_in_audience`, default `AzureADMyOrg`); user flows and
