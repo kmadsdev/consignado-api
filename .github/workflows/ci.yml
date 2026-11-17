@@ -98,3 +98,61 @@ jobs:
       - name: Stop
         if: always()
         run: docker compose down -v
+
+  # Runs only for a push to main. Login is OIDC: GitHub proves "this repository,
+  # branch main" and Azure gives a short-lived token. No password is stored.
+  deploy:
+    name: Deploy to AKS
+    needs: docker
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write            # lets the job ask GitHub for an OIDC token
+    concurrency:
+      group: deploy-aks          # never two deploys at the same time
+      cancel-in-progress: false
+    env:
+      IMAGE: ${{ vars.ACR_NAME }}.azurecr.io/consignado-api:${{ github.sha }}
+      APP_CLIENT_ID: ${{ secrets.APP_CLIENT_ID }}
+      TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      KV: ${{ vars.KV_NAME }}
+      PG: ${{ vars.PG_SERVER }}
+      PG_DB: ${{ vars.PG_DB }}
+      PG_ADMIN: ${{ vars.PG_ADMIN }}
+      ALLOWED_CIDR: ${{ secrets.ALLOWED_CIDR }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Azure login (OIDC, no secret)
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Build and push the image to ACR
+        run: |
+          az acr login --name "${{ vars.ACR_NAME }}"
+          docker build -t "$IMAGE" .
+          docker push "$IMAGE"
+
+      - name: Get the AKS credentials
+        run: az aks get-credentials --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" --name "${{ vars.AKS_NAME }}" --overwrite-existing
+
+      - name: Apply the manifests
+        run: ./deploy/render.sh | kubectl apply -f -
+
+      - name: Wait for the rollout
+        run: kubectl -n consignado rollout status deployment/consignado-api --timeout=300s
+
+      - name: Smoke test from inside the cluster
+        run: |
+          kubectl -n consignado run smoke-${{ github.run_id }} --rm -i --restart=Never \
+            --image=curlimages/curl:8.11.1 --command -- \
+            curl -fsS http://consignado-api.consignado.svc/actuator/health/readiness
+
+      - name: Show what runs now
+        if: always()
+        run: kubectl -n consignado get deploy,pods -o wide
