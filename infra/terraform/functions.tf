@@ -27,8 +27,12 @@ locals {
 
 # ---------- Gateway (Java 21) ----------
 
+locals {
+  gateway_app_name = "func-consignado-gw-${var.suffix}"
+}
+
 resource "azurerm_function_app_flex_consumption" "gateway" {
-  name                = "func-consignado-gw-${var.suffix}"
+  name                = local.gateway_app_name
   resource_group_name = local.rg_name
   location            = local.location
   service_plan_id     = azurerm_service_plan.gateway.id
@@ -37,7 +41,7 @@ resource "azurerm_function_app_flex_consumption" "gateway" {
   runtime_name           = "java"
   runtime_version        = "21"
   instance_memory_in_mb  = 2048
-  maximum_instance_count = var.function_max_instances
+  maximum_instance_count = var.gateway_max_instances
   https_only             = true
 
   # Deployment package: blob container, read with the app's identity (no connection string).
@@ -141,11 +145,12 @@ resource "azurerm_function_app_flex_consumption" "api" {
   runtime_name           = "custom"
   runtime_version        = "1.0"
   instance_memory_in_mb  = 2048
-  maximum_instance_count = var.function_max_instances
+  maximum_instance_count = var.api_host_max_instances
   https_only             = true
 
+  # Own storage account (security review M4): the package and the host storage are not in stconsigapp*.
   storage_container_type            = "blobContainer"
-  storage_container_endpoint        = "${azurerm_storage_account.app.primary_blob_endpoint}${azurerm_storage_container.app["deploy-api"].name}"
+  storage_container_endpoint        = "${azurerm_storage_account.apihost.primary_blob_endpoint}${azurerm_storage_container.apihost_deploy.name}"
   storage_authentication_type       = "UserAssignedIdentity"
   storage_user_assigned_identity_id = azurerm_user_assigned_identity.this["apifn"].id
 
@@ -173,7 +178,7 @@ resource "azurerm_function_app_flex_consumption" "api" {
   app_settings = {
     # Same rule as the gateway: no AzureWebJobsStorage setting beside the identity-based settings.
     AzureWebJobsStorage              = ""
-    AzureWebJobsStorage__accountName = azurerm_storage_account.app.name
+    AzureWebJobsStorage__accountName = azurerm_storage_account.apihost.name
     AzureWebJobsStorage__credential  = "managedidentity"
     AzureWebJobsStorage__clientId    = azurerm_user_assigned_identity.this["apifn"].client_id
 

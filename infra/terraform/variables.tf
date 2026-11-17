@@ -168,8 +168,15 @@ variable "enable_function_vnet_integration" {
   default     = true
 }
 
-variable "function_max_instances" {
-  description = "Cost guard: maximum instances of each Flex Consumption app."
+# Cost guard (security review M3, 2026-11-17): anonymous load on the guest route cannot grow past these caps.
+variable "gateway_max_instances" {
+  description = "Cost guard: maximum instances of the gateway (Flex Consumption, 2048 MB each)."
   type        = number
-  default     = 4
+  default     = 2
+}
+
+variable "api_host_max_instances" {
+  description = "Cost guard: maximum instances of the API host (Flex Consumption, 2048 MB each)."
+  type        = number
+  default     = 1
 }
