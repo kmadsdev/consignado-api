@@ -17,6 +17,9 @@ No consignado, a parcela é descontada direto da folha de pagamento. Por isso o 
 - cadastra convênios com margem máxima, prazo máximo e taxa mensal;
 - cadastra clientes com CPF validado (a resposta sempre devolve o CPF mascarado);
 - simula o empréstimo: parcela fixa, cronograma completo, total a pagar e checagem contra a margem livre naquele momento;
+- faz uma prévia para o visitante sem cadastro: o mesmo cálculo, sem ler nem gravar nada no banco;
+- lista convênios, clientes, simulações e contratos, do mais novo para o mais antigo;
+- altera a renda do cliente, mas só se a nova margem ainda cobrir as parcelas já comprometidas;
 - transforma a simulação em contrato e conduz o contrato por `PROPOSED -> APPROVED/REJECTED -> ACTIVE -> SETTLED/CANCELLED`, checando a margem de novo na aprovação;
 - grava o cronograma de parcelas quando o contrato é ativado;
 - publica cada mudança de status como evento via transactional outbox.
@@ -108,6 +111,12 @@ docker run --rm -v "$PWD":/work -w /work \
 
 Configuração por variável de ambiente: `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`. As configurações da aplicação ficam em `consignado.*` no `application.yml` (validade da simulação, intervalo do outbox, tamanho do lote, número máximo de tentativas).
 
+## Implantação
+
+`deploy/k8s` tem os manifests do Kubernetes e `deploy/render.sh` preenche os `${VAR}` deles (`IMAGE`, `APP_CLIENT_ID`, `TENANT_ID`, `KV`, `PG_HOST`, `PG_DB`, `PG_ADMIN`; nenhum é segredo). O Service é um load balancer interno do Azure com o IP privado fixo `10.10.3.200`, então a API não tem endereço público. A senha do banco vem do Key Vault via workload identity e o driver Secrets Store CSI.
+
+O job `deploy` em `.github/workflows/ci.yml` roda a cada push na `main`: login OIDC, imagem no registry, liga o cluster se ele estiver parado, `kubelogin` (Entra ID com Azure RBAC, sem conta local), apply, rollout, smoke test de dentro do cluster e checagem do IP do load balancer. Ele nunca desliga o cluster; quem desliga é o timer do gateway. Os motivos estão na [ADR 0007](docs/adr/0007-two-hosts-one-api.md).
+
 ## Exemplos de uso
 
 As saídas abaixo vieram de uma execução local, resumidas.
@@ -170,6 +179,64 @@ curl -s 'localhost:8080/api/v1/contracts?customerId=<id do cliente>&status=ACTIV
 curl -s localhost:8080/api/v1/customers/<id do cliente>/margin
 ```
 
+**6. Listagens**, da mais nova para a mais antiga. Clientes, simulações e contratos são paginados (`page` de 0 a 10000, `size` de 1 a 100, padrão 20) e usam o mesmo envelope; convênios vêm como um array simples.
+
+```bash
+curl -s 'localhost:8080/api/v1/customers?page=0&size=20'
+curl -s 'localhost:8080/api/v1/simulations?page=0&size=20'    # resumos: listagem não traz cronograma
+curl -s localhost:8080/api/v1/agreements
+```
+
+```json
+{ "content": [ { "id": "...", "cpf": "***.***.***-04", "fullName": "Maria Example", "netMonthlySalary": 4200.00 } ],
+  "page": 0, "size": 20, "totalElements": 1, "totalPages": 1 }
+```
+
+**7. Alteração de renda.** É a única atualização fora do fluxo do contrato; não existe `DELETE` nem outro `PATCH` ou `PUT`. O novo limite (renda x a margem do convênio, arredondado para baixo) precisa cobrir as parcelas dos contratos APPROVED e ACTIVE.
+
+```bash
+curl -s -X PATCH localhost:8080/api/v1/customers/<id do cliente>/income \
+  -H 'Content-Type: application/json' -d '{ "monthlyIncome": 1000.00 }'
+# 200 com o cliente, ou, com o contrato de 353,24 acima aprovado (35% de 1000,00 = 350,00):
+```
+
+```json
+{
+  "type": "urn:consignado:problem:income-below-committed-margin",
+  "title": "Income below committed margin",
+  "status": 422,
+  "detail": "The new margin limit 350.00 is below the committed installments 353.24",
+  "code": "income-below-committed-margin",
+  "marginLimit": 350.00,
+  "committedInstallments": 353.24
+}
+```
+
+A requisição trava a linha do cliente, como a aprovação faz. Assim, um corte de renda e uma aprovação no mesmo instante não passam os dois ([ADR 0003](docs/adr/0003-contract-states-and-concurrency.md), [ADR 0007](docs/adr/0007-two-hosts-one-api.md)).
+
+**8. Prévia** para o visitante sem cadastro. Sem estado: sem repositório, sem transação, nada é gravado. `monthlyIncome` e `maxMarginPercent` são opcionais, mas andam juntos; sem eles os dois campos de margem não aparecem.
+
+```bash
+curl -s -X POST localhost:8080/api/v1/simulations/preview -H 'Content-Type: application/json' -d '{
+  "principal": 15000.00, "termMonths": 84, "monthlyInterestRate": 0.0185,
+  "monthlyIncome": 4200.00, "maxMarginPercent": 35 }'
+```
+
+```json
+{
+  "principal": 15000.00,
+  "termMonths": 84,
+  "monthlyInterestRate": 0.0185,
+  "installment": 353.24,
+  "totalAmount": 29672.96,
+  "totalInterest": 14672.96,
+  "marginLimit": 1470.00,
+  "withinMargin": true
+}
+```
+
+Os números são os do exemplo 3, porque o caminho de código é o mesmo (`PriceAmortization`, `MarginPolicy`). `withinMargin` compara a maior parcela (354,04 aqui) com o limite. Limites: principal de 100,00 a 1.000.000,00, prazo de 1 a 420 meses, taxa de 0 até menos que 1.
+
 ### Erros
 
 Todo erro sai como `application/problem+json` (RFC 9457, que substituiu a RFC 7807), com um `code` estável e o `correlationId` da requisição. A tabela de códigos está no [README em inglês](README.md#errors).
@@ -184,23 +251,25 @@ Todo erro sai como `application/problem+json` (RFC 9457, que substituiu a RFC 78
 | [0004](docs/adr/0004-idempotent-contract-creation.md) | `Idempotency-Key` com unique constraint; requisições duplicadas e concorrentes caem no mesmo contrato |
 | [0005](docs/adr/0005-transactional-outbox.md) | Transactional outbox, relay com `SKIP LOCKED`, porta `EventPublisher`; onde um adapter de broker entra |
 | [0006](docs/adr/0006-observability.md) | Correlation id, logs JSON, readiness separado de liveness, métricas de negócio, CPF fora de log e de URL |
+| [0007](docs/adr/0007-two-hosts-one-api.md) | Dois hosts (AKS e uma function) rodam o mesmo jar no mesmo banco; a API não tem login, só o gateway chega nela; prévia sem estado para visitantes; sem delete e uma única alteração de renda protegida |
 
 As ADRs estão em inglês.
 
 ## Testes
 
-- **Unitários** do domínio: dígito verificador do CPF, cronograma conferido à mão, empate do HALF_EVEN, taxa zero, prazos de até 420 meses, arredondamento da margem e os 49 pares de status.
-- **Slice web** (`@WebMvcTest`): status, headers, corpo dos erros, validação, nada vazando num 500.
+- **Unitários** do domínio: dígito verificador do CPF, cronograma conferido à mão, empate do HALF_EVEN, taxa zero, prazos de até 420 meses, arredondamento da margem, a trava da alteração de renda, os 49 pares de status e os números da prévia.
+- **Slice web** (`@WebMvcTest`): status, headers, corpo dos erros, validação, limites de paginação, nada vazando num 500. `SimulationPreviewTest` roda a prévia de verdade num contexto sem `DataSource`, sem JPA e sem repositório.
 - **Repositório** (`@DataJpaTest` com PostgreSQL de verdade): migrations, constraints, lock otimista, soma da margem, paginação.
-- **Integração** (app inteira + PostgreSQL via HTTP): ciclo completo, criação idempotente concorrente, aprovações concorrentes, ordem e retry do outbox, probes e métricas.
-- **Arquitetura** (ArchUnit): regras de camada.
+- **Integração** (app inteira + PostgreSQL via HTTP): ciclo completo, criação idempotente concorrente, aprovações concorrentes, corte de renda concorrendo com uma aprovação, listagens da mais nova para a mais antiga, prévia igual à simulação gravada, ordem e retry do outbox, probes e métricas.
+- **Arquitetura** (ArchUnit): regras de camada e nenhuma dependência de armazenamento na prévia do visitante.
 
-Os CPFs dos testes são gerados na hora com dígitos válidos; não existe CPF real no repositório. O build falha abaixo de 80% de cobertura de linha (JaCoCo); a última execução ficou em torno de 94%.
+Os CPFs dos testes são gerados na hora com dígitos válidos; não existe CPF real no repositório. O build falha abaixo de 80% de cobertura de linha (JaCoCo); a última execução ficou em torno de 96%.
 
 ## O que não foi feito
 
 - **IOF e CET.** Não são calculados; ver [ADR 0002](docs/adr/0002-money-and-rounding.md).
-- **Autenticação e autorização.** Todos os endpoints estão abertos.
+- **Autenticação e autorização dentro da API.** A API não tem login: na plataforma implantada só o gateway chega nela, e é o gateway que valida o token do Entra ID ([ADR 0007](docs/adr/0007-two-hosts-one-api.md)). Rodando local, todos os endpoints estão abertos.
+- **Dados por tenant e exclusão.** Todos os usuários veem o mesmo conjunto de dados. Nada pode ser apagado pela API.
 - **Pagamentos.** Parcela não é baixada como paga; quitação é uma mudança manual de status. Sem quitação antecipada, refinanciamento ou portabilidade.
 - **Integração com a folha.** Sem averbação no sistema do empregador e sem troca de arquivos de folha.
 - **Adapter de broker de verdade.** Os eventos vão para o log; o outbox e a porta já estão prontos para isso.
