@@ -1,10 +1,15 @@
-# Public entry: an Azure Load Balancer with a public IP.
-# The API has no authentication, so only ALLOWED_CIDR may reach it.
+# Private entry: an INTERNAL Azure Load Balancer with a fixed IP inside the virtual
+# network (subnet snet-aks, 10.10.0.0/22). The API has no authentication of its own,
+# so it has no public address: only the gateway, which runs inside the same virtual
+# network, can reach 10.10.3.200. See docs/adr/0007-two-hosts-one-api.md.
 apiVersion: v1
 kind: Service
 metadata:
   name: consignado-api
   namespace: consignado
+  annotations:
+    service.beta.kubernetes.io/azure-load-balancer-internal: "true"
+    service.beta.kubernetes.io/azure-load-balancer-ipv4: "10.10.3.200"
 spec:
   type: LoadBalancer
   selector:
@@ -13,5 +18,3 @@ spec:
     - name: http
       port: 80
       targetPort: http
-  loadBalancerSourceRanges:
-    - "${ALLOWED_CIDR}"
