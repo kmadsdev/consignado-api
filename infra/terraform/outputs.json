@@ -1,0 +1,181 @@
+{
+  "aks": {
+    "api_server_url": "https://consignado-ioiuejag.hcp.belgiumcentral.azmk8s.io:443",
+    "csi_client_id": "860cc069-d1e8-421b-8526-61b14c099908",
+    "engine_role_name": "Consignado Engine Operator",
+    "internal_lb_ip": "10.10.3.200",
+    "internal_url": "http://10.10.3.200",
+    "kubelet_client_id": "9e3136ea-1730-4713-a658-860f99fc380b",
+    "name": "aks-consignado",
+    "namespace": "consignado",
+    "node_resource_group": "MC_rg-consignado_aks-consignado_belgiumcentral",
+    "service_account": "consignado-api"
+  },
+  "dns_records": [],
+  "edge": {
+    "gateway_host": "func-consignado-gw-km01.azurewebsites.net",
+    "kind": "cloudflare",
+    "shared_header_secret": "edge-key",
+    "static_site_host": "stconsigwebkm01.z50.web.core.windows.net"
+  },
+  "email": {
+    "communication_service": "acs-consignado-km01",
+    "data_location": "Europe",
+    "endpoint": "https://acs-consignado-km01.europe.communication.azure.com",
+    "sender": "DoNotReply@ea0f9001-6862-4672-a75a-1097be47f2ec.azurecomm.net"
+  },
+  "entra": {
+    "gateway": {
+      "audience": "fb67ac41-c884-4a0b-8dae-4d2af0b99169",
+      "client_id": "fb67ac41-c884-4a0b-8dae-4d2af0b99169",
+      "display_name": "consignado-api-gateway",
+      "identifier_uri": "api://fb67ac41-c884-4a0b-8dae-4d2af0b99169",
+      "object_id": "4e265c40-0654-4d5b-8349-dd00e5ebb615",
+      "scope": "api://fb67ac41-c884-4a0b-8dae-4d2af0b99169/access_as_user"
+    },
+    "sign_in_audience": "AzureADMyOrg",
+    "spa": {
+      "client_id": "e5203a86-b171-46a2-9158-02f3befaac83",
+      "display_name": "consignado-spa",
+      "object_id": "de50042b-0221-4815-b0d6-c743b839d48b",
+      "redirect_uris": [
+        "http://localhost:5173/",
+        "https://cluster.consignado.kmads.dev/",
+        "https://consignado.kmads.dev/"
+      ]
+    }
+  },
+  "functions": {
+    "api": {
+      "base_url": "https://func-consignado-api-km01.azurewebsites.net",
+      "deploy_container": "deploy-api",
+      "hostname": "func-consignado-api-km01.azurewebsites.net",
+      "max_instances": 1,
+      "name": "func-consignado-api-km01",
+      "storage_account": "stconsigapifnkm01"
+    },
+    "gateway": {
+      "allowed_cidrs": [
+        "173.245.48.0/20",
+        "103.21.244.0/22",
+        "103.22.200.0/22",
+        "103.31.4.0/22",
+        "141.101.64.0/18",
+        "108.162.192.0/18",
+        "190.93.240.0/20",
+        "188.114.96.0/20",
+        "197.234.240.0/22",
+        "198.41.128.0/17",
+        "162.158.0.0/15",
+        "104.16.0.0/13",
+        "104.24.0.0/14",
+        "172.64.0.0/13",
+        "131.0.72.0/22"
+      ],
+      "base_url": "https://func-consignado-gw-km01.azurewebsites.net",
+      "deploy_container": "deploy-gateway",
+      "hostname": "func-consignado-gw-km01.azurewebsites.net",
+      "inbound": "edge-ip-ranges-only",
+      "max_instances": 2,
+      "name": "func-consignado-gw-km01",
+      "storage_account": "stconsigappkm01",
+      "vnet_integrated": true
+    }
+  },
+  "github_oidc": {
+    "client_id": "3d6b08b1-402f-4d4b-b20b-021dcd4bcc56",
+    "subjects": {
+      "consignado-api": "repo:kmadsdev@158073300/consignado-api@1456253050:ref:refs/heads/main",
+      "consignado-front": "repo:kmadsdev@158073300/consignado-front@1460963568:ref:refs/heads/main",
+      "consignado-serverless": "repo:kmadsdev@158073300/consignado-serverless@1460963640:ref:refs/heads/main"
+    }
+  },
+  "identities": {
+    "id-consignado-apifn": {
+      "client_id": "a3090d00-c7ec-4dfd-ae68-7138667f3f0e",
+      "principal_id": "d2fed764-7d9b-49b6-8724-65a56d7376cd"
+    },
+    "id-consignado-app": {
+      "client_id": "b79eae78-d2b1-41b5-be87-74bc76c3879c",
+      "principal_id": "a274c7d5-0644-42f7-b4db-dfe588a09a5d"
+    },
+    "id-consignado-github": {
+      "client_id": "3d6b08b1-402f-4d4b-b20b-021dcd4bcc56",
+      "principal_id": "dfed42ec-c648-48a2-a9f6-bdb8d26fa9df"
+    },
+    "id-consignado-gw": {
+      "client_id": "c32a0a1b-bb50-4001-879b-9f295aeca499",
+      "principal_id": "36ac4544-5fc1-4504-80e8-a623eda4cfb1"
+    }
+  },
+  "key_vault": {
+    "name": "kv-consig-km01",
+    "purge_protection": true,
+    "secret_names": [
+      "db-password",
+      "edge-key",
+      "hash-key",
+      "apifn-host-key",
+      "turnstile-secret"
+    ],
+    "uri": "https://kv-consig-km01.vault.azure.net/"
+  },
+  "location": "belgiumcentral",
+  "monitoring": {
+    "app_insights_app_id": "012fff6b-9454-4ca2-bd5a-e6ea34dbd581",
+    "app_insights_name": "appi-consignado",
+    "budget_action_group": "ag-consignado-budget",
+    "budget_name": "budget-consignado",
+    "budget_webhook_is_set": true,
+    "log_analytics_name": "log-consignado"
+  },
+  "postgres": {
+    "database": "consignado",
+    "fqdn": "psql-consignado-km01.postgres.database.azure.com",
+    "jdbc_url": "jdbc:postgresql://psql-consignado-km01.postgres.database.azure.com:5432/consignado?sslmode=require",
+    "location": "northcentralus",
+    "password_secret": "db-password",
+    "server_name": "psql-consignado-km01",
+    "username": "pgadmin"
+  },
+  "registry": {
+    "login_server": "crconsignadokm01.azurecr.io",
+    "name": "crconsignadokm01"
+  },
+  "resource_group": "rg-consignado",
+  "storage": {
+    "apihost": {
+      "blob_endpoint": "https://stconsigapifnkm01.blob.core.windows.net/",
+      "containers": [
+        "deploy-api"
+      ],
+      "name": "stconsigapifnkm01"
+    },
+    "app": {
+      "blob_endpoint": "https://stconsigappkm01.blob.core.windows.net/",
+      "containers": [
+        "data",
+        "deploy-api",
+        "deploy-gateway"
+      ],
+      "name": "stconsigappkm01",
+      "table_endpoint": "https://stconsigappkm01.table.core.windows.net/",
+      "tables": [
+        "audit",
+        "contacts",
+        "engine",
+        "sessions",
+        "users"
+      ]
+    },
+    "web": {
+      "container": "$web",
+      "name": "stconsigwebkm01",
+      "web_endpoint": "https://stconsigwebkm01.z50.web.core.windows.net/",
+      "web_host": "stconsigwebkm01.z50.web.core.windows.net"
+    }
+  },
+  "vnet": {
+    "name": "vnet-consignado"
+  }
+}
