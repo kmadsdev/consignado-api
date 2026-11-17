@@ -2,6 +2,7 @@
 
 - Status: accepted
 - Date: 2026-11-17
+- Updated: 2026-11-17, after the first live day
 
 ## Context
 
@@ -32,7 +33,7 @@ The platform stores personal data only to limit abuse, so the limits must work w
 **The budget guard**
 
 - A subscription budget, `budget-consignado`: US$60 per month, with alerts at 50, 80 and 100 percent to the owner.
-- At 100 percent an action group calls `POST /api/hooks/budget` on the gateway, with a function key. The gateway reads the spend and the budget from the payload. Spend at or above the budget, or a payload that cannot be read, pauses the engine (reason `budget`), ends the open windows and stops the cluster. An earlier alert writes an audit row only.
+- At 100 percent an action group calls `POST /api/hooks/budget` on the gateway, with a function key, through the edge (this route does not need the edge key). The URL holds the key, so it is not in a file: Terraform reads it from `TF_VAR_budget_webhook_url`. An apply without that variable removes the webhook. The gateway reads the spend and the budget from the payload. Spend at or above the budget, or a payload that cannot be read, pauses the engine (reason `budget`), ends the open windows and stops the cluster. An earlier alert writes an audit row only.
 - While the engine is paused, new windows are refused. The site and the serverless host continue.
 - The owner can pause, resume and stop the engine by hand in `/admin`.
 
@@ -44,7 +45,8 @@ The platform stores personal data only to limit abuse, so the limits must work w
 - Held accounts need the owner's attention. A real person on a shared device waits for an approval.
 - The per-user guard counts in memory per instance. It stops a loop of one user, not a distributed attack.
 - A failed bot check configuration is open, not closed: until the secret exists there is no bot check. This was chosen so that the platform can start before the widget exists.
-- Not verified when this ADR was written: the delivery of the budget alert, the payload fields of the webhook, and the Turnstile call against Cloudflare.
+- Verified live: the Turnstile check (a visible browser passes, a headless browser is refused).
+- Not verified at the time of writing: the delivery of the budget alert, the payload fields of the webhook, a pause from a real alert, the email to the owner, and the duplicate-account hold with two real accounts.
 
 ## What a bank would add
 
