@@ -9,6 +9,13 @@ This directory creates the Azure resources of the platform (contract section 2) 
 
 - Terraform >= 1.9 (made with 1.16), providers `azurerm` 4.x, `azuread` 3.x, `random` 3.x (versions pinned in `.terraform.lock.hcl`).
 - Sign in first: `az login` as the Owner of the subscription. The same user must be able to create app registrations in the tenant.
+- Azure resource providers are registered by hand, not by Terraform (`resource_provider_registrations = "none"` in `versions.tf`:
+  the student subscription refuses some of the default list). The stack needs: `Microsoft.App`, `Microsoft.Authorization`,
+  `Microsoft.Communication`, `Microsoft.Consumption`, `Microsoft.ContainerRegistry`, `Microsoft.ContainerService`,
+  `Microsoft.CostManagement`, `Microsoft.DBforPostgreSQL`, `Microsoft.KeyVault`, `Microsoft.ManagedIdentity`, `Microsoft.Network`,
+  `Microsoft.OperationalInsights`, `microsoft.insights`, `Microsoft.Storage`, `Microsoft.Web`, and `Microsoft.ResourceHealth`
+  (registered 2026-11-17 21:00 UTC for the gateway live status; free). `Microsoft.Cdn` only with `enable_front_door = true`.
+  Register one with `az provider register -n <namespace>`.
 - Non-secret results: [`outputs.json`](outputs.json) (committed). Secrets are only in Key Vault and in the remote state.
 
 ## Commands
@@ -192,8 +199,12 @@ With Front Door Standard (+35.00) the fixed cost would be about 66 to 70: higher
   `POST /api/fn/api/v1/simulations/preview`. The caps limit that spend: gateway 2 instances, API host 1 instance,
   2048 MB each (variables `gateway_max_instances`, `api_host_max_instances`; before: 4 for both).
 - **Gateway live status (contract addendum part 1).** The gateway identity has `Monitoring Reader` on `rg-consignado`,
-  and the gateway app settings `GATEWAY_APP_ID`, `API_APP_ID`, `KEY_VAULT_ID`, `POSTGRES_ID` hold the resource ids it reads.
+  and the gateway app settings `GATEWAY_APP_ID`, `API_APP_ID`, `KEY_VAULT_ID`, `POSTGRES_ID`, `APPINSIGHTS_ID` hold the resource ids it reads.
   `GATEWAY_APP_ID` is built from the resource group id and the name (a reference to the app itself is a cycle).
+  `APPINSIGHTS_ID` (Application Insights `appi-consignado`) is read for the request metrics; `Monitoring Reader` covers it.
+- **Other gateway settings (2026-11-17).** `ENTRA_SPA_CLIENT_ID` = client id of `consignado-spa`: the gateway accepts a token only
+  when it was issued to that client (security review L5). `TURNSTILE_HOSTNAMES` = `consignado.kmads.dev,cluster.consignado.kmads.dev`
+  (from `custom_domains`): the Turnstile answer must name one of them (security review L4). `EDGE` stays `cloudflare`.
   The ids are not secrets, but they are not outputs: they hold the subscription id.
 - **Outputs in a public repository (security review I4, 2026-11-17).** `outputs.json` holds names, host names and client
   ids only: no tenant id, no subscription id, no object id of a person, no ARM resource id. These values are not secrets;
