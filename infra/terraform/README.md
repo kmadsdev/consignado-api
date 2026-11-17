@@ -64,6 +64,15 @@ Notes for operation:
   without printing the value:
   `az functionapp config appsettings delete -g rg-consignado -n <app> --setting-names AzureWebJobsStorage`
   The next plan still shows "No changes".
+- **After a change of the API host's storage (`stconsigapifn*`, or its `AzureWebJobsStorage__accountName`): deploy the
+  package and refresh the host key.** The function keys of a Functions host live in its host storage, so new storage gives
+  the API host NEW keys. The gateway sends the Key Vault secret `apifn-host-key` as `x-functions-key`; a stale secret makes
+  every API host call answer 401 (seen 2026-11-17 about 21:08-21:14 UTC). In this order:
+  1. `gh workflow run api-host.yml -R kmadsdev/consignado-serverless -f api_ref=main` and wait for it (the new
+     `deploy-api` container is empty until then);
+  2. copy the new key into Key Vault, without printing it:
+     `az functionapp keys list -g rg-consignado -n func-consignado-api-km01 --query functionKeys.default -o tsv | az keyvault secret set --vault-name kv-consig-km01 -n apifn-host-key --file /dev/stdin --encoding utf-8 -o none`
+  3. prove it: `POST https://consignado.kmads.dev/api/fn/api/v1/simulations/preview` answers 200 with an `installment`.
 - **Feature flags.** `enable_front_door` (default `false`), `enable_email`, `enable_budget`, `enable_function_vnet_integration` switch a part that the subscription refuses.
 - **Cloudflare ranges.** `gateway_allowed_cidrs` holds the list of `https://www.cloudflare.com/ips-v4` of 2026-11-17. When Cloudflare changes the list, change the variable and apply.
 - The subscription policy allows only `belgiumcentral`, `northcentralus`, `chilecentral`, `mexicocentral`, `southafricanorth`.
