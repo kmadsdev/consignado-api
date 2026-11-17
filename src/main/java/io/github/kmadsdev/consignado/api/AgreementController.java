@@ -6,6 +6,7 @@ import io.github.kmadsdev.consignado.application.Views.AgreementView;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import java.util.List;
 import java.util.UUID;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -41,5 +42,11 @@ class AgreementController {
     @Operation(summary = "Get an agreement")
     AgreementView get(@PathVariable UUID id) {
         return service.get(id);
+    }
+
+    @GetMapping
+    @Operation(summary = "List agreements, newest first", description = "Not paged: agreements are reference data")
+    List<AgreementView> list() {
+        return service.list();
     }
 }
