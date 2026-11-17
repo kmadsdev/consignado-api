@@ -101,12 +101,22 @@ jobs:
 
   # Runs only for a push to main. Login is OIDC: GitHub proves "this repository,
   # branch main" and Azure gives a short-lived token. No password is stored.
+  #
+  # The cluster uses Entra ID with Azure RBAC for Kubernetes and has no local
+  # accounts, so kubectl logs in with the same Azure identity (kubelogin).
+  # The cluster is normally STOPPED to save cost: this job starts it when needed
+  # and never stops it. The gateway's timer stops it again when no access window
+  # is open (docs/adr/0007-two-hosts-one-api.md).
+  #
+  # The Azure IDs are secrets, not variables, because the logs of a public
+  # repository are public and GitHub masks secrets in them. No step prints the
+  # kubeconfig or a token.
   deploy:
     name: Deploy to AKS
     needs: docker
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 45          # a cold start of the cluster takes several minutes
     permissions:
       contents: read
       id-token: write            # lets the job ask GitHub for an OIDC token
@@ -114,14 +124,17 @@ jobs:
       group: deploy-aks          # never two deploys at the same time
       cancel-in-progress: false
     env:
+      RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+      ACR_NAME: ${{ vars.ACR_NAME }}
+      AKS_NAME: ${{ vars.AKS_NAME }}
       IMAGE: ${{ vars.ACR_NAME }}.azurecr.io/consignado-api:${{ github.sha }}
       APP_CLIENT_ID: ${{ secrets.APP_CLIENT_ID }}
       TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
       KV: ${{ vars.KV_NAME }}
-      PG: ${{ vars.PG_SERVER }}
+      PG_HOST: ${{ vars.PG_HOST }}
       PG_DB: ${{ vars.PG_DB }}
       PG_ADMIN: ${{ vars.PG_ADMIN }}
-      ALLOWED_CIDR: ${{ secrets.ALLOWED_CIDR }}
+      LB_IP: "10.10.3.200"       # the fixed private IP in deploy/k8s/50-service.yaml
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -134,12 +147,67 @@ jobs:
 
       - name: Build and push the image to ACR
         run: |
-          az acr login --name "${{ vars.ACR_NAME }}"
+          set -euo pipefail
+          az acr login --name "$ACR_NAME"
           docker build -t "$IMAGE" .
           docker push "$IMAGE"
 
-      - name: Get the AKS credentials
-        run: az aks get-credentials --resource-group "${{ vars.AZURE_RESOURCE_GROUP }}" --name "${{ vars.AKS_NAME }}" --overwrite-existing
+      # "az aks show" prints one word here (--query ... -o tsv), never the full
+      # resource, which holds the subscription and tenant IDs.
+      - name: Start the cluster when it is stopped
+        run: |
+          set -euo pipefail
+          state() { az aks show --resource-group "$RESOURCE_GROUP" --name "$AKS_NAME" --query "$1" --output tsv; }
+
+          # The gateway's timer may be starting or stopping the cluster right now.
+          # A start during another operation fails, so wait until it settles (10 minutes at most).
+          for i in $(seq 1 40); do
+            provisioning=$(state provisioningState)
+            case "$provisioning" in
+              Starting|Stopping|Updating) echo "cluster is $provisioning, waiting"; sleep 15 ;;
+              *) break ;;
+            esac
+          done
+
+          power=$(state powerState.code)
+          echo "power state: $power"
+          if [ "$power" = "Stopped" ]; then
+            # "az aks start" returns when the cluster runs. Azure can refuse a start
+            # that comes too soon after a stop, so try again after a pause.
+            for attempt in 1 2 3; do
+              if az aks start --resource-group "$RESOURCE_GROUP" --name "$AKS_NAME" --output none; then break; fi
+              if [ "$attempt" = 3 ]; then echo "the cluster did not start" >&2; exit 1; fi
+              echo "start attempt $attempt failed, waiting 3 minutes"
+              sleep 180
+            done
+          fi
+          test "$(state powerState.code)" = "Running"
+          echo "power state: Running"
+
+      # The token from the first login comes from a GitHub OIDC assertion that is
+      # valid for a few minutes. After a long cluster start the Azure CLI cannot use
+      # it to get a token for Kubernetes, so log in again with a new assertion.
+      - name: Azure login again (new OIDC assertion after the start)
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Install kubelogin
+        uses: azure/use-kubelogin@0ce7c36141aa27d4934872cf00b0120804c98a29 # v1.3
+        with:
+          kubelogin-version: v0.2.22
+
+      # The kubeconfig holds no credential: kubelogin makes kubectl ask the Azure
+      # CLI session of this job for a token on each call. Azure RBAC decides what
+      # the CI identity may do in the cluster.
+      - name: Get the AKS credentials (Entra ID, no local account)
+        run: |
+          set -euo pipefail
+          az aks get-credentials --resource-group "$RESOURCE_GROUP" --name "$AKS_NAME" --overwrite-existing --output none
+          kubelogin convert-kubeconfig -l azurecli
+          kubectl wait --for=condition=Ready nodes --all --timeout=300s
 
       - name: Apply the manifests
         run: ./deploy/render.sh | kubectl apply -f -
@@ -153,6 +221,21 @@ jobs:
             --image=curlimages/curl:8.11.1 --command -- \
             curl -fsS http://consignado-api.consignado.svc/actuator/health/readiness
 
+      # The gateway calls the API through the internal load balancer, so the
+      # Service must hold exactly this private IP.
+      - name: Check the internal load balancer IP
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 36); do
+            ip=$(kubectl -n consignado get service consignado-api -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+            if [ "$ip" = "$LB_IP" ]; then echo "internal load balancer: $ip"; exit 0; fi
+            sleep 5
+          done
+          echo "the Service has IP '${ip:-none}', expected $LB_IP" >&2
+          kubectl -n consignado describe service consignado-api | tail -n 15
+          exit 1
+
+      # No "stop" step on purpose: the gateway's timer owns the stop.
       - name: Show what runs now
         if: always()
-        run: kubectl -n consignado get deploy,pods -o wide
+        run: kubectl -n consignado get deploy,pods,service -o wide
