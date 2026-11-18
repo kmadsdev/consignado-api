@@ -73,6 +73,10 @@ Notes for operation:
   2. copy the new key into Key Vault, without printing it:
      `az functionapp keys list -g rg-consignado -n func-consignado-api-km01 --query functionKeys.default -o tsv | az keyvault secret set --vault-name kv-consig-km01 -n apifn-host-key --file /dev/stdin --encoding utf-8 -o none`
   3. prove it: `POST https://consignado.kmads.dev/api/fn/api/v1/simulations/preview` answers 200 with an `installment`.
+- **Budget currency.** Azure keeps the amount of a budget in the billing currency of the subscription, and "Azure for
+  Students" here is billed in BRL. `budget_amount` (default 330 = the owner's US$60 at about R$ 5.50 per US dollar,
+  2026-11-18) is therefore in BRL; the same number goes to the gateway as `BUDGET_LIMIT` with `BUDGET_CURRENCY = BRL`
+  (and, for one release, the old name `BUDGET_LIMIT_USD`). Until 2026-11-18 the amount was 60, so the real limit was R$ 60.
 - **Feature flags.** `enable_front_door` (default `false`), `enable_email`, `enable_budget`, `enable_function_vnet_integration` switch a part that the subscription refuses.
 - **Cloudflare ranges.** `gateway_allowed_cidrs` holds the list of `https://www.cloudflare.com/ips-v4` of 2026-11-17. When Cloudflare changes the list, change the variable and apply.
 - **Tables** are made by an ARM deployment (`consignado-tables`): `azurerm_storage_table` needs the account key, and the account accepts none.
@@ -116,7 +120,7 @@ Notes for operation:
 | Identities | `id-consignado-app`, `-gw`, `-apifn`, `-github` | belgiumcentral | User-assigned. Federated credentials: pods, and the `main` branch of the three GitHub repositories. |
 | Custom role | `Consignado Engine Operator` | scope `rg-consignado` | read / start / stop / agentPools read / listClusterUserCredential. No write, no delete. |
 | Entra apps | `consignado-spa`, `consignado-api-gateway` | tenant | No client secrets. Scope `api://<client id>/access_as_user`, token v2, SPA pre-authorized. |
-| Budget | `budget-consignado`, action group `ag-consignado-budget` | subscription | US$60 per month; 50, 80, 100 percent to the owner; 100 percent also calls the action group. |
+| Budget | `budget-consignado`, action group `ag-consignado-budget` | subscription | R$ 330 per month (about US$60); Azure bills this subscription in BRL (`budget_amount` = 330, in the billing currency: the owner's US$60 at about R$ 5.50 per US dollar, 2026-11-18); 50, 80, 100 percent to the owner; 100 percent also calls the action group. |
 
 ### Role assignments
 
@@ -159,7 +163,7 @@ A month = 730 hours. Lines with **(estimate)** depend on use.
 | AKS outbound public IP (Standard, static) | 0.005 / hour | 3.65 | Stays while the cluster is stopped. |
 | AKS load balancer (Standard, <= 5 rules) | **(estimate)** 0.025 / hour | **(estimate)** 0 to 18.25 | The retail API returned no meter for this region. Billed when rules exist; UNVERIFIED whether it is billed while the cluster is stopped. |
 | AKS control plane | 0 | 0 | Free tier. |
-| AKS node `Standard_D2as_v4` | 0.104 / hour | 0 | Only while the cluster runs: 0.026 for one 15-minute window. 100 windows = 2.60. 730 hours = 75.92 (never leave it on). |
+| AKS node `Standard_D2as_v4` | 0.104 / hour | 0 | Only while the cluster runs: 0.026 for the 15 minutes of one window, about 0.04 with the start and the stop. 100 windows = about 4. 730 hours = 75.92 (never leave it on). |
 | Function apps (Flex Consumption, on demand) | 0.000034 / GB-second, 0.0000005 / execution | **(estimate)** 0 to 1 | Monthly free grant (100 000 GB-seconds, 250 000 executions). No always-ready instances. |
 | Storage (4 accounts, LRS, hot) | 0.018 / GB-month | **(estimate)** < 0.50 | Site, deployment packages, tables, Terraform state. |
 | Key Vault Standard | per 10 000 operations | **(estimate)** < 0.10 | |
@@ -168,8 +172,8 @@ A month = 730 hours. Lines with **(estimate)** depend on use.
 | Budget, action group, identities, VNet, WAF policy (Standard tier), Entra apps | 0 | 0 | |
 | **Total (as built, no Front Door)** | | **about 31 to 35 fixed; up to about 53 if the load balancer line is billed in full** | |
 
-The fixed cost is below the US$60 budget, mainly PostgreSQL (16.09), the registry (5.00), the OS disk (5.81) and the public IP (3.65).
-With Front Door Standard (+35.00) the fixed cost would be about 66 to 70: higher than the budget. Keep that in mind before
+The fixed cost (about R$ 170 to 195 at R$ 5.50 per US dollar) is below the budget of R$ 330 per month (about US$60); Azure bills this subscription in BRL. The fixed cost is mainly PostgreSQL (16.09), the registry (5.00), the OS disk (5.81) and the public IP (3.65).
+With Front Door Standard (+35.00) the fixed cost would be about 66 to 70 (about R$ 363 to 385): higher than the budget. Keep that in mind before
 `enable_front_door = true` on a different subscription. A running cluster adds 2.50 per day.
 
 ## Decisions and trade-offs

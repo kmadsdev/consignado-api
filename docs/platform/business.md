@@ -26,14 +26,14 @@ Sign-up is self-service with an email one-time code. No password, no social logi
 
 The owner chose 3 windows of 15 minutes per account. The sources record the choice and not a written reason. The facts around it:
 
-- **15 minutes** of node time cost about US$0.026. The countdown starts when the cluster is ready, not when the user asks.
+- **One window** costs about US$0.04 of node time, the start and the stop included (US$0.026 for the 15 minutes alone). The countdown starts when the cluster is ready, not when the user asks.
 - **3 windows** per account; more on request. A window is counted only when it opens; a failed start costs the user nothing.
 - **The cluster stops at the end** and a 15-minute cool-down follows. A visitor who arrives in the cool-down sees the time left and can use the serverless host in the meantime.
 - **The wait is shown, not hidden.** A stopped cluster needs minutes to start. The page draws each stage of the start from real signals.
 
 ## The request form for more
 
-A user with no windows left sees a form: "Request more windows". The same form on the home page takes general questions. The owner reads each message and can grant 1 to 20 more windows to an account.
+A user with no windows left sees a form: "Request more windows". The same form on the home page takes general questions. The owner reads each message and can grant 1 to 10 more windows at a time to an account (the limit of the admin form).
 
 A grant is a decision of the owner. Nothing refills the windows automatically.
 
@@ -43,8 +43,8 @@ The rule is one person, one trial. A second account on the same device is held u
 
 ## The budget
 
-- **US$60 per month**, on an "Azure for Students" subscription that is paid from a student credit.
-- With the cluster stopped, the fixed cost is about US$31 to 35 per month (retail prices of 2026-11-17; some lines are estimates). The rest is room for windows and deploys.
+- **R$ 330 per month (about US$60)**, on an "Azure for Students" subscription that is paid from a student credit. Azure bills this subscription in BRL, so the budget amount is in BRL: the owner chose US$60, converted at about R$ 5.50 per US dollar on 2026-11-18.
+- With the cluster stopped, the fixed cost is about US$31 to 35 (about R$ 170 to 195) per month (retail prices of 2026-11-17; some lines are estimates). The rest is room for windows and deploys.
 - At 50 and 80 percent the owner gets an email. At 100 percent the engine is paused and no new window starts. The terms of the site say "until the next month"; the resume itself is a manual action of the owner in `/admin`.
 - The pause touches only the Kubernetes host. The site, the diagram and the serverless host continue.
 - The budget is an alert with an automatic action. It is not a hard spending cap.

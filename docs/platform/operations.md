@@ -203,10 +203,11 @@ Prices: Azure retail prices API, read on 2026-11-17, US dollars, pay-as-you-go, 
 |---|---|
 | Node `Standard_D2as_v4`, per hour | 0.104 |
 | One 15-minute window, node time only | 0.026 |
-| 100 windows | 2.60 |
+| One window, start and stop included (about 24 minutes of node time) | about 0.04 |
+| 100 windows | about 4 (2.60 for the 15 minutes alone) |
 | Cluster left on for a month | 75.92 |
 
-The node also runs during the start, the stop and the 20-minute grace period after a deploy, so the real cost of a window is higher than 0.026. That extra was not measured.
+The node also runs during the start (about 7 minutes) and the stop (about 2 minutes), so one window costs about US$0.04 of node time (the number the site uses, `src/app/cost.ts` of the frontend). The 20-minute grace period after a deploy is extra. The budget itself is R$ 330 per month (about US$60); Azure bills this subscription in BRL: compare the numbers above with it at about R$ 5.50 per US dollar (2026-11-18).
 
 The database can be stopped for 7 days at most with `az postgres flexible-server stop -g rg-consignado -n psql-consignado-km01`. Azure starts it again after that. Both hosts fail while it is stopped.
 
@@ -345,6 +346,9 @@ Real incidents of 2026-11-17, in the order they happened. Each one: symptom, cau
     Cause: the first refresh ran before `apifn-host-key` existed; why it stayed empty for so long is not known. Fix: none needed; it filled at a later refresh.
 17. **Budget webhook not in any file.** Symptom: none yet; it is a trap.
     Cause: the webhook URL holds a function key and is passed as `TF_VAR_budget_webhook_url`. Fix: set the variable before every plan or apply (section 1); otherwise the apply removes the webhook.
+18. **Budget in the wrong currency.** Symptom (2026-11-18): `az consumption budget show` gave amount 60 and a spend of R$ 23.15 (39 percent on day 18); the engine would have paused itself within days.
+    Cause: Azure keeps a budget in the billing currency, and this subscription is billed in BRL, so the "US$60" budget was R$ 60 (about US$11). The gateway also read the cost as `CostUSD` and the admin page printed BRL values as US$.
+    Fix: budget R$ 330 (the owner's US$60 at about R$ 5.50), gateway settings `BUDGET_LIMIT` and `BUDGET_CURRENCY`, cost query `Cost` with its `Currency` column, admin page in the currency the gateway sends.
 
 Still open after the first day: a `DELETE` refused at the edge gets the Cloudflare HTML block page, not the JSON `{code, message}` of the contract; the Microsoft sign-up pages and the code mail show the tenant's display name, not the product name; the frontend cannot show the full CPF, because the API returns it masked to every caller.
 
