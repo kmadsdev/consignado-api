@@ -7,7 +7,7 @@
 
 The same jar now runs on two Azure hosts: pods on AKS and an Azure Function with a custom handler. Both read and write the same PostgreSQL database. A gateway sits in front of both. It checks the Entra ID token, decides which host a request may use, and forwards only `GET`, `POST` and `PATCH` on `/api/v1/`.
 
-Three kinds of caller exist: a guest with no token, a signed-in user, and the owner. The data is shared: every user sees the same agreements, customers and contracts.
+Three kinds of caller exist: a guest with no token, a signed-in user, and the admin. The data is shared: every user sees the same agreements, customers and contracts.
 
 That leaves three questions for this API. Who checks the caller? What may a guest do? What may a user change in data that belongs to everybody?
 
@@ -44,4 +44,4 @@ Authentication, sessions, quotas and the per-request trace live in the gateway. 
 - **Service-to-service authentication.** The gateway would prove its identity on every call (mTLS in a mesh, or a managed-identity token that the API validates as an OAuth2 resource server), so a network mistake alone is not enough. The API would then also check roles: an operator approves, a customer only simulates.
 - **Per-tenant data.** A tenant or owner column on every row, filtered in every query (and row-level security in PostgreSQL), instead of one shared data set.
 - **An audit log inside the API** for the income change and every workflow step: who, when, old and new value. Today only the contract's status changes are recorded, as outbox events.
-- **Rate limits per caller** on the preview, inside the API or the gateway. Here the WAF on Front Door is the only protection in front of it.
+- **Rate limits per caller** on the preview, inside the API or the gateway. Here the protection in front of it is the edge: the Cloudflare Worker with the zone rules (a rate limit of 40 requests per 10 seconds per IP address on `/api/`, a method allow-list), and the gateway, which accepts only Cloudflare address ranges with the edge key. Front Door and its WAF were never created ([ADR 0010](0010-cloudflare-edge-instead-of-front-door.md)).

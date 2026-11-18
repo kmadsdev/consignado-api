@@ -29,9 +29,13 @@ variable "suffix" {
 }
 
 variable "owner_email" {
-  description = "Owner: budget alerts and gateway notifications."
+  description = "Email address of the admin: budget alerts (50, 80, 100 percent) and gateway notifications (app setting OWNER_EMAIL). Required, no default: the repository is public. Set it with TF_VAR_owner_email (README, step 2)."
   type        = string
-  default     = "kaiquemoreira520@gmail.com"
+
+  validation {
+    condition     = can(regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$", var.owner_email))
+    error_message = "owner_email must be an email address."
+  }
 }
 
 variable "custom_domains" {
@@ -77,15 +81,25 @@ variable "aks_internal_lb_ip" {
 }
 
 variable "entra_sign_in_audience" {
-  description = "Who can sign in to the two app registrations. The integrator decides (user flows are not managed here)."
+  description = "Who can sign in to the two app registrations. Set it when the sign-up user flow changes (user flows are not managed here)."
   type        = string
   default     = "AzureADMyOrg"
 }
 
 variable "budget_amount" {
-  description = "Monthly budget of the subscription, in the billing currency (USD)."
+  description = <<-EOT
+    Monthly budget of the subscription, in the BILLING CURRENCY of the subscription (var.budget_currency, BRL here),
+    not in US dollars: Azure keeps a budget amount in the billing currency. 330 = the US$60 I chose, at about
+    R$5.50 per US dollar (rate of 2026-11-18). Change it here when the budget changes. The gateway gets the same number (BUDGET_LIMIT).
+  EOT
   type        = number
-  default     = 60
+  default     = 330
+}
+
+variable "budget_currency" {
+  description = "ISO 4217 code of the billing currency of the subscription (\"Azure for Students\" is billed in BRL). Only a label for the gateway (BUDGET_CURRENCY); Azure takes the budget amount in this currency."
+  type        = string
+  default     = "BRL"
 }
 
 variable "budget_start_date" {
@@ -95,7 +109,7 @@ variable "budget_start_date" {
 }
 
 variable "budget_webhook_url" {
-  description = "Gateway webhook that the action group calls at 100 percent. Empty = no webhook (the integrator sets it later)."
+  description = "Gateway webhook that the action group calls at 100 percent. Empty = no webhook. Set it with TF_VAR_budget_webhook_url on every plan and apply (README, step 2)."
   type        = string
   default     = ""
 }
@@ -120,7 +134,7 @@ variable "enable_front_door" {
 }
 
 variable "edge" {
-  description = "The edge in front of the gateway and the site. `cloudflare` = a Cloudflare Worker (owner's decision, 2026-11-17, because Front Door is refused)."
+  description = "The edge in front of the gateway and the site. `cloudflare` = a Cloudflare Worker (my decision, 2026-11-17, because Front Door is refused)."
   type        = string
   default     = "cloudflare"
 }

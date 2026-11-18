@@ -16,7 +16,7 @@ The platform has two hosts for the same jar (an Azure Function and pods on AKS).
 
 - **Routing.** `/api/fn/...` goes to the API on Functions. `/api/aks/...` goes to the internal load balancer of AKS. Only paths under `api/v1/`, only `GET`, `POST` and `PATCH`, bodies up to 64 KB, and an allow-list of six request headers go upstream. `Authorization` and cookies never go upstream.
 - **Identity.** The gateway verifies the Entra ID token itself: signature against the tenant's keys, issuer, tenant, audience, `exp`, `nbf` and the scope `access_as_user`. A token that does not verify gives 401; it is never treated as a guest.
-- **Access rules.** A guest may call one proxied route, the stateless preview. A user may call the Functions host at all times and the AKS host only with an own window in state `ready`. The admin is the owner's account.
+- **Access rules.** A guest may call one proxied route, the stateless preview. A user may call the Functions host at all times and the AKS host only with an own window in state `ready`. The admin is my own account.
 - **Trace.** Each proxied answer carries `x-consignado-host` and `x-consignado-trace`: the stages of the request with measured milliseconds, and `cold=true` only for the Functions host and only when the upstream call took more than 8 seconds. The first rule (3 seconds, both hosts) marked slow business calls as cold starts.
 - **Engine.** The gateway starts and stops the cluster for access windows (ADR 0009) and holds the budget guard (ADR 0012).
 - **Structure.** Plain Java, no Spring. The rules are in `core/` with no Azure type and an injected clock. Azure is behind interfaces in `ports/`; the implementations are in `adapters/`. All objects are built once in `App.java`.

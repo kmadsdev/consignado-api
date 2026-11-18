@@ -31,7 +31,7 @@ Both host names go to the same Worker.
 |---|---|---|
 | Guest | No token. | One API route: the stateless loan preview on the serverless host (`POST /api/fn/api/v1/simulations/preview`), and the public gateway routes (health, engine state, masked snapshot, contact form). Never the AKS host. Never the database. |
 | User | Microsoft Entra ID token. | The serverless host at all times. The AKS host only inside an own access window: 15 minutes, 3 windows per account. Reads all shared data. Writes only through the workflow endpoints. |
-| Admin | The owner's account. | All of the above with no window limit, plus `/admin`: users, sessions, engine state, budget, contact requests. The admin is matched by the object id in the token. |
+| Admin | My own account. | All of the above with no window limit, plus `/admin`: users, sessions, engine state, budget, contact requests. The admin is matched by the object id in the token. |
 
 ## Pages
 
@@ -68,9 +68,9 @@ Times are in the browser of the tester unless the row says otherwise.
 | Access window on a running cluster | **Verified** after a fix. The first window waited 14 min 44 s because of a gateway defect (see [Lessons](operations.md#9-lessons-from-the-first-day)). It became ready at the first observation after the fix was deployed. |
 | Automatic cluster stop after the last window | **Verified.** ARM accepted the stop (HTTP 202); the engine went to `stopping`, then `cooldown`; the cluster showed `Stopped` about 2 minutes later. A new window was refused with 409 `cooldown` until 15 minutes after the stop. |
 | Seed data in the database | **Done.** 4 agreements, 50 customers, 60 simulations, 30 contracts, all synthetic, made through the API by `deploy/seed/seed.sh` (branch `feat/seed`; not merged into `main` at the time of writing). The guest snapshot shows the rows masked. |
-| Real cold start of the AKS cluster from `Stopped` | **Not verified at the time of writing.** A test is in progress. <!-- integrator: update this row --> |
-| Admin pages (`/admin`) with a real admin token | **Not verified at the time of writing.** A test is in progress. <!-- integrator: update this row --> |
-| Email to the owner when a new user signs up | Not verified. |
+| Real cold start of the AKS cluster from `Stopped` | **Verified** on 2026-11-17: 7 min 13 s from the request to the first answer (control plane 4 min 26 s, node 2 min 13 s, Spring Boot and database 26 s, load balancer 8 s). A window on a running cluster is ready in under 2 s. The automatic stop after the window worked. |
+| Admin pages (`/admin`) with a real admin token | **Verified** on 2026-11-17 with a real token: users, grant of windows, sessions, contact requests, pause and resume, stop of the engine. |
+| Email to the admin when a new user signs up | Not verified. |
 | Duplicate-account hold with two real accounts | Not verified. The rule is tested with fakes only. |
 | Budget pause from a real budget alert | Not verified. The webhook is attached to the action group (see [operations](operations.md#6-when-the-budget-alert-fires)). |
 
@@ -83,7 +83,7 @@ Times are in the browser of the tester unless the row says otherwise.
 | AKS host, warm call | about 0.76 s (median of 12 calls; range 0.50 s to 1.1 s) | Browser time inside an access window. Gateway trace `totalMs` median 519 ms. |
 | `POST .../contracts/{id}/activate` | 4.6 s to 4.8 s on both hosts | Browser time. The other writes take 0.9 s to 1.2 s. The cause is not known yet. |
 | Cluster stop | about 2 minutes | From the accepted ARM stop to `Stopped / Succeeded` in `az aks show`. |
-| Cluster start from `Stopped` | not verified at the time of writing | |
+| Cluster start from `Stopped` | 7 min 13 s (control plane 4 min 26 s, node 2 min 13 s, Spring Boot and database 26 s, load balancer 8 s) | One measured run on 2026-11-17, from the window request to the first answer. A window on a running cluster: under 2 s. |
 
 Local numbers from before the deploy (Functions host image under emulation: cold start 11.2 s to 12.0 s) are kept in the `api-host` README of `consignado-serverless`. They were too low: they do not include instance allocation and package mount on Azure.
 

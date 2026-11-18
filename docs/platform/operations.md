@@ -1,6 +1,6 @@
 # Operations runbook
 
-For the owner of the platform. Resource names are real. No ID, key or address is written here: read them from Terraform outputs or Key Vault when a command needs one.
+For the admin of the platform (me). Resource names are real. No ID, key or address is written here: read them from Terraform outputs or Key Vault when a command needs one.
 
 Back to the [entry page](README.md).
 
@@ -11,12 +11,12 @@ Section 9 lists the incidents of the first live day, with cause and fix.
 
 | Part | Repository | How | Trigger |
 |---|---|---|---|
-| Azure resources | `consignado-api`, `infra/terraform` | Terraform, by hand | The owner |
+| Azure resources | `consignado-api`, `infra/terraform` | Terraform, by hand | The admin |
 | API on AKS | `consignado-api` | `.github/workflows/ci.yml`, job `deploy` | Push to `main` |
 | Gateway | `consignado-serverless` | `.github/workflows/gateway.yml` | Push to `main` |
 | API on Functions | `consignado-serverless` | `.github/workflows/api-host.yml` | Push to `main`, or by hand with an API ref |
 | Site | `consignado-front` | `.github/workflows/deploy.yml` | Push to `main` |
-| Edge Worker | `consignado-front`, `edge/` | `wrangler`, by hand | The owner |
+| Edge Worker | `consignado-front`, `edge/` | `wrangler`, by hand | The admin |
 
 All workflows sign in with GitHub OIDC as the identity `id-consignado-github`. Each repository holds three secrets (`AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`). They are IDs, not passwords; they are secrets only so that GitHub masks them in public logs.
 
@@ -37,6 +37,7 @@ terraform output -json > outputs.json      # commit this file; no secret is an o
 - New role assignments need one or two minutes. If the first apply fails with a 403, apply again.
 - App settings of the function apps belong to Terraform. A setting made in the portal or with the CLI is removed by the next apply. Add it in `functions.tf`.
 - When Cloudflare changes its address list, change the variable `gateway_allowed_cidrs` and apply.
+- **Always set `TF_VAR_owner_email` before a plan or an apply.** The admin email address has no default in the public repository. Read it back from the gateway setting, without printing it: `export TF_VAR_owner_email="$(az functionapp config appsettings list -g rg-consignado -n func-consignado-gw-km01 --query "[?name=='OWNER_EMAIL'].value | [0]" -o tsv)"`.
 - **Always set `TF_VAR_budget_webhook_url` before a plan or an apply.** The webhook URL of the budget action group holds a function key, so it is in no file. Terraform reads it from this variable. An apply without it removes the webhook from the action group, and the budget alert then sends email only. Read the URL from the place where you keep it and export it in the same shell, without printing it:
 
   ```bash
@@ -63,7 +64,7 @@ kubelogin convert-kubeconfig -l azurecli
 WITH_NAMESPACE=1 ./deploy/render.sh | kubectl apply -f -
 ```
 
-`00-namespace.yaml` has no placeholder, so `kubectl apply -f deploy/k8s/00-namespace.yaml` does the same for the namespace alone. Only an identity with a cluster-scope role can do this (the owner has `Azure Kubernetes Service RBAC Cluster Admin`). The namespace on the live cluster was created once this way, with `az aks command invoke`, before the deploy job ran in the namespace.
+`00-namespace.yaml` has no placeholder, so `kubectl apply -f deploy/k8s/00-namespace.yaml` does the same for the namespace alone. Only an identity with a cluster-scope role can do this (the admin account has `Azure Kubernetes Service RBAC Cluster Admin`). The namespace on the live cluster was created once this way, with `az aks command invoke`, before the deploy job ran in the namespace.
 
 If Azure refuses the start because a stop was recent, the job tries 3 times with 3 minutes between tries, then fails. Run the job again.
 
@@ -147,7 +148,7 @@ A direct call to the gateway function app, not through the edge, must answer 403
 
 ## 2. Pause and resume the engine
 
-Open `https://consignado.kmads.dev/admin` with the owner's account, section "Engine and budget".
+Open `https://consignado.kmads.dev/admin` with the admin account, section "Engine and budget".
 
 | Action | Effect |
 |---|---|
@@ -203,10 +204,11 @@ Prices: Azure retail prices API, read on 2026-11-17, US dollars, pay-as-you-go, 
 |---|---|
 | Node `Standard_D2as_v4`, per hour | 0.104 |
 | One 15-minute window, node time only | 0.026 |
-| 100 windows | 2.60 |
+| One window, start and stop included (about 24 minutes of node time) | about 0.04 |
+| 100 windows | about 4 (2.60 for the 15 minutes alone) |
 | Cluster left on for a month | 75.92 |
 
-The node also runs during the start, the stop and the 20-minute grace period after a deploy, so the real cost of a window is higher than 0.026. That extra was not measured.
+The node also runs during the start (about 7 minutes) and the stop (about 2 minutes), so one window costs about US$0.04 of node time (the number the site uses, `src/app/cost.ts` of the frontend). The 20-minute grace period after a deploy is extra. The budget itself is R$ 330 per month (about US$60); Azure bills this subscription in BRL: compare the numbers above with it at about R$ 5.50 per US dollar (2026-11-18).
 
 The database can be stopped for 7 days at most with `az postgres flexible-server stop -g rg-consignado -n psql-consignado-km01`. Azure starts it again after that. Both hosts fail while it is stopped.
 
@@ -244,7 +246,7 @@ Then make both hosts read the new value:
 
 ## 6. When the budget alert fires
 
-1. **50 or 80 percent.** An email goes to the owner. The gateway writes an audit row only. Check `/admin`, "Engine and budget", and the cost view of the resource group. Look for a cluster that was left running.
+1. **50 or 80 percent.** An email goes to the admin. The gateway writes an audit row only. Check `/admin`, "Engine and budget", and the cost view of the resource group. Look for a cluster that was left running.
 2. **100 percent.** The action group calls the gateway webhook (`/api/hooks/budget`). The gateway pauses the engine (reason `budget`), ends the open windows and stops the cluster. The site and the serverless host continue. The webhook exists only while Terraform is applied with `TF_VAR_budget_webhook_url` (section 1).
 3. Confirm the stop: `az aks show -g rg-consignado -n aks-consignado --query powerState.code`. If it is not `Stopped`, stop it by hand (section 3). Delivery of the alert and the webhook was not verified live, so do not rely on step 2 alone.
 4. Find the cause before a resume: many windows, a cluster left on by a deploy, log ingestion, or the load balancer line.
@@ -254,7 +256,7 @@ The alert is not a hard cap. The fixed costs of section 4 continue while the eng
 
 ## 7. Remove a user's data on request
 
-The gateway has no delete route. The owner does this by hand, with a data role on the storage account (the account accepts no key; Terraform does not give the owner a table data role, so assign one first). **(not executed)**
+The gateway has no delete route. The admin does this by hand, with a data role on the storage account (the account accepts no key; Terraform does not give the admin a table data role, so assign one first). **(not executed)**
 
 | Where | What to remove |
 |---|---|
@@ -314,7 +316,7 @@ Real incidents of 2026-11-17, in the order they happened. Each one: symptom, cau
 1. **Front Door refused.** Symptom: `terraform apply` failed on the Front Door profile with `Free Trial and Student account is forbidden for Azure Frontdoor resources`.
    Cause: the subscription offer. Fix: the edge is the Cloudflare Worker `consignado-edge` ([ADR 0010](../adr/0010-cloudflare-edge-instead-of-front-door.md)); the Front Door code stays behind `enable_front_door = false`.
 2. **External ID tenant refused.** Symptom: a separate Entra External ID tenant could not be created.
-   Cause: the region policy of the subscription. Fix: a B2B self-service sign-up user flow with an email one-time code in the owner's own tenant, with guests at the most restricted level ([ADR 0011](../adr/0011-sign-up-in-the-workforce-tenant.md)).
+   Cause: the region policy of the subscription. Fix: a B2B self-service sign-up user flow with an email one-time code in my own tenant, with guests at the most restricted level ([ADR 0011](../adr/0011-sign-up-in-the-workforce-tenant.md)).
 3. **Tables could not be made by Terraform.** Symptom: `azurerm_storage_table` failed with "Key based authentication is not permitted on this storage account".
    Cause: the provider uses the account key for tables. Fix: the five tables are made by an ARM deployment (`consignado-tables`).
 4. **Gateway answered 500 on every route.** Symptom: also `/api/health` failed.
@@ -345,9 +347,12 @@ Real incidents of 2026-11-17, in the order they happened. Each one: symptom, cau
     Cause: the first refresh ran before `apifn-host-key` existed; why it stayed empty for so long is not known. Fix: none needed; it filled at a later refresh.
 17. **Budget webhook not in any file.** Symptom: none yet; it is a trap.
     Cause: the webhook URL holds a function key and is passed as `TF_VAR_budget_webhook_url`. Fix: set the variable before every plan or apply (section 1); otherwise the apply removes the webhook.
+18. **Budget in the wrong currency.** Symptom (2026-11-18): `az consumption budget show` gave amount 60 and a spend of R$ 23.15 (39 percent on day 18); the engine would have paused itself within days.
+    Cause: Azure keeps a budget in the billing currency, and this subscription is billed in BRL, so the "US$60" budget was R$ 60 (about US$11). The gateway also read the cost as `CostUSD` and the admin page printed BRL values as US$.
+    Fix: budget R$ 330 (the US$60 I chose, at about R$ 5.50), gateway settings `BUDGET_LIMIT` and `BUDGET_CURRENCY`, cost query `Cost` with its `Currency` column, admin page in the currency the gateway sends.
 
 Still open after the first day: a `DELETE` refused at the edge gets the Cloudflare HTML block page, not the JSON `{code, message}` of the contract; the Microsoft sign-up pages and the code mail show the tenant's display name, not the product name; the frontend cannot show the full CPF, because the API returns it masked to every caller.
 
 ## Example
 
-A hypothetical case. The owner gets the 80 percent email on the 20th of the month. In `/admin` the engine shows `running` with no active session for two hours. The owner clicks "Stop the engine now", confirms `Stopped` with `az aks show`, then looks for the cause in the audit rows and the gateway logs before the next window is allowed.
+A hypothetical case. The admin gets the 80 percent email on the 20th of the month. In `/admin` the engine shows `running` with no active session for two hours. The admin clicks "Stop the engine now", confirms `Stopped` with `az aks show`, then looks for the cause in the audit rows and the gateway logs before the next window is allowed.
