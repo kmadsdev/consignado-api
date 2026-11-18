@@ -270,7 +270,7 @@ X-Consignado-Timing: {"instance":"894a9bcc0d0c","appMs":6.6,"db":{"ms":2.4,"stat
 | [0002](docs/adr/0002-money-and-rounding.md) | `BigDecimal`, HALF_EVEN, última parcela absorve a sobra, margem arredonda para baixo; IOF e CET ficaram de fora de propósito |
 | [0003](docs/adr/0003-contract-states-and-concurrency.md) | Uma tabela de transições; `@Version` + ETag/If-Match por contrato; lock na linha do cliente para duas aprovações não usarem a mesma margem |
 | [0004](docs/adr/0004-idempotent-contract-creation.md) | `Idempotency-Key` com unique constraint; requisições duplicadas e concorrentes caem no mesmo contrato |
-| [0005](docs/adr/0005-transactional-outbox.md) | Transactional outbox, relay com `SKIP LOCKED`, porta `EventPublisher`; onde um adapter de broker entra |
+| [0005](docs/adr/0005-transactional-outbox.md) | Transactional outbox, relay com `SKIP LOCKED` que mantém a ordem por contrato com vários pods, porta `EventPublisher`; onde um adapter de broker entra |
 | [0006](docs/adr/0006-observability.md) | Correlation id, logs JSON, readiness separado de liveness, métricas de negócio, CPF fora de log e de URL |
 | [0007](docs/adr/0007-two-hosts-one-api.md) | Dois hosts (AKS e uma function) rodam o mesmo jar no mesmo banco; a API não tem login, só o gateway chega nela; prévia sem estado para visitantes; sem delete e uma única alteração de renda protegida |
 | [0013](docs/adr/0013-per-request-timing-headers.md) | `Server-Timing` e `X-Consignado-Timing` em toda resposta: tempo da aplicação e trabalho JDBC por tipo, via datasource-proxy; só números, nunca SQL ou dados |
@@ -282,7 +282,7 @@ As ADRs estão em inglês.
 - **Unitários** do domínio: dígito verificador do CPF, cronograma conferido à mão, empate do HALF_EVEN, taxa zero, prazos de até 420 meses, arredondamento da margem, a trava da alteração de renda, os 49 pares de status, os números da prévia e as strings exatas dos headers de tempo.
 - **Slice web** (`@WebMvcTest`): status, headers, corpo dos erros, validação, limites de paginação, nada vazando num 500. `SimulationPreviewTest` roda a prévia de verdade num contexto sem `DataSource`, sem JPA e sem repositório.
 - **Repositório** (`@DataJpaTest` com PostgreSQL de verdade): migrations, constraints, lock otimista, soma da margem, paginação.
-- **Integração** (app inteira + PostgreSQL via HTTP): ciclo completo, criação idempotente concorrente, aprovações concorrentes, corte de renda concorrendo com uma aprovação, listagens da mais nova para a mais antiga, prévia igual à simulação gravada, ordem e retry do outbox, probes e métricas, headers de tempo em 201/200/404/422/400 com `"db":null` na prévia.
+- **Integração** (app inteira + PostgreSQL via HTTP): ciclo completo, criação idempotente concorrente, aprovações concorrentes, corte de renda concorrendo com uma aprovação, listagens da mais nova para a mais antiga, prévia igual à simulação gravada, ordem e retry do outbox (também com dois relays no mesmo banco), probes e métricas, headers de tempo em 201/200/404/422/400 com `"db":null` na prévia.
 - **Arquitetura** (ArchUnit): regras de camada e nenhuma dependência de armazenamento na prévia do visitante.
 
 Os CPFs dos testes são gerados na hora com dígitos válidos; não existe CPF real no repositório. O build falha abaixo de 80% de cobertura de linha (JaCoCo); a última execução ficou em torno de 95%.
