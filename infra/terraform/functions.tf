@@ -106,22 +106,26 @@ resource "azurerm_function_app_flex_consumption" "gateway" {
     AzureWebJobsStorage__credential  = "managedidentity"
     AzureWebJobsStorage__clientId    = azurerm_user_assigned_identity.this["gw"].client_id
 
-    AZURE_CLIENT_ID     = azurerm_user_assigned_identity.this["gw"].client_id
-    ENTRA_TENANT_ID     = local.tenant_id
-    ENTRA_API_AUDIENCE  = azuread_application.gateway.client_id
-    ADMIN_OID           = local.admin_oid
-    AKS_RESOURCE_ID     = azurerm_kubernetes_cluster.main.id
-    AKS_API_SERVER_URL  = "https://${azurerm_kubernetes_cluster.main.fqdn}:443"
-    AKS_CA_CERT_B64     = azurerm_kubernetes_cluster.main.kube_config[0].cluster_ca_certificate
-    AKS_INTERNAL_URL    = "http://${var.aks_internal_lb_ip}"
-    APIFN_BASE_URL      = "https://${azurerm_function_app_flex_consumption.api.default_hostname}"
-    KEY_VAULT_URL       = azurerm_key_vault.main.vault_uri
-    STORAGE_ACCOUNT     = azurerm_storage_account.app.name
-    EDGE                = var.edge
-    OWNER_EMAIL         = var.owner_email
-    WINDOW_MINUTES      = "15"
-    WINDOWS_MAX         = "3"
-    COOLDOWN_MINUTES    = "15"
+    AZURE_CLIENT_ID    = azurerm_user_assigned_identity.this["gw"].client_id
+    ENTRA_TENANT_ID    = local.tenant_id
+    ENTRA_API_AUDIENCE = azuread_application.gateway.client_id
+    ADMIN_OID          = local.admin_oid
+    AKS_RESOURCE_ID    = azurerm_kubernetes_cluster.main.id
+    AKS_API_SERVER_URL = "https://${azurerm_kubernetes_cluster.main.fqdn}:443"
+    AKS_CA_CERT_B64    = azurerm_kubernetes_cluster.main.kube_config[0].cluster_ca_certificate
+    AKS_INTERNAL_URL   = "http://${var.aks_internal_lb_ip}"
+    APIFN_BASE_URL     = "https://${azurerm_function_app_flex_consumption.api.default_hostname}"
+    KEY_VAULT_URL      = azurerm_key_vault.main.vault_uri
+    STORAGE_ACCOUNT    = azurerm_storage_account.app.name
+    EDGE               = var.edge
+    OWNER_EMAIL        = var.owner_email
+    WINDOW_MINUTES     = "15"
+    WINDOWS_MAX        = "3"
+    COOLDOWN_MINUTES   = "15"
+    # The budget in the billing currency (BRL), the same number as the Azure budget.
+    BUDGET_LIMIT    = tostring(var.budget_amount)
+    BUDGET_CURRENCY = var.budget_currency
+    # Old name, same number, for the gateway release before fix/budget-currency. Remove after that release is live.
     BUDGET_LIMIT_USD    = tostring(var.budget_amount)
     AZURE_SUBSCRIPTION  = var.subscription_id
     AZURE_RESOURCEGROUP = local.rg_name

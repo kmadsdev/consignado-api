@@ -83,9 +83,19 @@ variable "entra_sign_in_audience" {
 }
 
 variable "budget_amount" {
-  description = "Monthly budget of the subscription, in the billing currency (USD)."
+  description = <<-EOT
+    Monthly budget of the subscription, in the BILLING CURRENCY of the subscription (var.budget_currency, BRL here),
+    not in US dollars: Azure keeps a budget amount in the billing currency. 330 = the owner's US$60 at about
+    R$5.50 per US dollar (rate of 2026-11-18). The owner can change it. The gateway gets the same number (BUDGET_LIMIT).
+  EOT
   type        = number
-  default     = 60
+  default     = 330
+}
+
+variable "budget_currency" {
+  description = "ISO 4217 code of the billing currency of the subscription (\"Azure for Students\" is billed in BRL). Only a label for the gateway (BUDGET_CURRENCY); Azure takes the budget amount in this currency."
+  type        = string
+  default     = "BRL"
 }
 
 variable "budget_start_date" {
