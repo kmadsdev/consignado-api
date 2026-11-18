@@ -17,9 +17,11 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * Moves one batch from the outbox to the {@link EventPublisher}.
  *
- * <p>Ordering: rows are read in insert order. When an event fails, later events of the
- * same aggregate are skipped in this batch, so a consumer never sees "approved" before
- * "proposed". Events of other aggregates continue.
+ * <p>Ordering: rows are read in insert order. The claim query never returns a row while an
+ * earlier row of the same aggregate is unpublished outside the batch (for example, locked by
+ * the relay of another pod), so any number of instances can run. When an event fails, later
+ * events of the same aggregate are skipped in this batch, so a consumer never sees "approved"
+ * before "proposed". Events of other aggregates continue.
  *
  * <p>Failures: the row keeps {@code attempts} and {@code last_error}. After
  * {@code maxAttempts} the row is no longer picked up and needs a person to look at it
