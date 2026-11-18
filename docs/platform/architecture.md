@@ -11,7 +11,7 @@ Back to the [entry page](README.md).
 flowchart LR
   guest["Guest, no account"]
   user["Signed-in user"]
-  admin["Owner, admin"]
+  admin["Admin (me)"]
 
   subgraph cf["Cloudflare"]
     zone["Zone rules: rate limit, method allow-list, managed challenge"]
@@ -50,7 +50,7 @@ Three kinds of people use the platform. All of them enter through Cloudflare: fi
 The Worker sends page requests to the static site and API requests to the gateway.
 The gateway is the only caller of the two API hosts. Both hosts run the same jar and use the same database.
 Entra ID signs users in. The gateway reads the public signing keys of the tenant to check each token.
-GitHub Actions deploys the three repositories. Terraform, run by the owner, creates the resources.
+GitHub Actions deploys the three repositories. Terraform, which I run by hand, creates the resources.
 
 ## b. Page load path and API request path
 
@@ -285,7 +285,7 @@ No password or client secret is stored in a repository, in GitHub or in an app r
 - **Workload identity.** A pod proves itself with its Kubernetes service account token. Entra ID exchanges it for the identity `id-consignado-app`, which can read secrets in Key Vault. The database password is mounted into the pod at start.
 - **Managed identities.** The two function apps and the kubelet call Azure with identities that Azure manages. Storage and Key Vault accept no account key.
 - **User tokens.** A user signs in at Entra ID. The gateway checks the signature, issuer, tenant, audience, times and scope of every token itself.
-- **Kubernetes access.** Azure RBAC for Kubernetes, local accounts off. No kubeconfig with a client certificate exists. The deploy identity has `Azure Kubernetes Service RBAC Admin` on the namespace `consignado` only, so it cannot create the namespace or touch anything outside it. The gateway has `Azure Kubernetes Service RBAC Reader`, which cannot list nodes. The owner has `Azure Kubernetes Service RBAC Cluster Admin` and creates the namespace once.
+- **Kubernetes access.** Azure RBAC for Kubernetes, local accounts off. No kubeconfig with a client certificate exists. The deploy identity has `Azure Kubernetes Service RBAC Admin` on the namespace `consignado` only, so it cannot create the namespace or touch anything outside it. The gateway has `Azure Kubernetes Service RBAC Reader`, which cannot list nodes. My own account has `Azure Kubernetes Service RBAC Cluster Admin` and creates the namespace once.
 
 Secrets that still exist, all in Key Vault: `db-password` (PostgreSQL has password login), `apifn-host-key` (the function key of the API host), `turnstile-secret`, `hash-key`, `edge-key`. Terraform makes `db-password`, `edge-key` and `hash-key`. The budget webhook URL holds a function key; it is kept outside the repository and given to Terraform as `TF_VAR_budget_webhook_url`.
 
@@ -310,7 +310,7 @@ flowchart LR
   end
 
   subgraph infra["consignado-api, infra/terraform"]
-    t1["terraform plan and apply by the owner"]
+    t1["terraform plan and apply, by hand"]
   end
 ```
 
@@ -320,6 +320,6 @@ The API image is built with the official Maven image, not the Maven wrapper: the
 
 The API host package is built from the API source at a chosen ref, so the serverless host and the AKS host run the same code. The workflow proves the package in a local Functions host container before the deploy.
 
-The Worker and Terraform are run by hand. A Cloudflare token is not stored in any repository, and Terraform needs the owner's sign-in.
+The Worker and Terraform are run by hand. A Cloudflare token is not stored in any repository, and Terraform needs my sign-in.
 
 State on 2026-11-17: the API deploy job, the gateway workflow and the site workflow ran green against Azure. The API host serves live calls, but both runs of its workflow on that day ended with the deploy step marked failed (the zip was accepted, then the host key could not be fetched). A fully green run is not on record at the time of writing.

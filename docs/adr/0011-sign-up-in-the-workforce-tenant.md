@@ -1,4 +1,4 @@
-# ADR 0011: Sign-up in the owner's own Entra ID tenant
+# ADR 0011: Sign-up in my own Entra ID tenant
 
 - Status: accepted
 - Date: 2026-11-17
@@ -12,7 +12,7 @@ The usual product for this is a separate Microsoft Entra External ID tenant: a d
 
 ## Decision
 
-**Recruiters sign up in the owner's own tenant, as guest users, through a B2B self-service sign-up user flow.**
+**Recruiters sign up in my own tenant, as guest users, through a B2B self-service sign-up user flow.**
 
 - The user flow is `B2X_1_consignado`. Identity providers: Entra ID accounts and **email one-time code**. Microsoft personal accounts are not selected. The only attributes collected are the display name and the email address.
 - The app registration of the site, `consignado-spa`, is linked to the user flow. It is a single-page application with no client secret. The gateway has its own registration, `consignado-api-gateway`, which exposes the scope `access_as_user` and issues version 2 tokens.

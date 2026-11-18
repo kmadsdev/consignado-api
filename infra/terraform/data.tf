@@ -20,7 +20,7 @@ resource "azurerm_postgresql_flexible_server" "main" {
   backup_retention_days        = 7
   geo_redundant_backup_enabled = false
 
-  # Owner's decision (cost): public endpoint, TLS required (server default
+  # My decision for cost (a private endpoint is about US$8 per month more): public endpoint, TLS required (server default
   # require_secure_transport = on), only the "Azure services" firewall rule.
   public_network_access_enabled = true
 
@@ -66,7 +66,7 @@ resource "azurerm_key_vault" "main" {
   tags                     = local.tags
 }
 
-# The secrets `apifn-host-key` and `turnstile-secret` are set by the integrator.
+# The secrets `apifn-host-key` and `turnstile-secret` are set by hand (operations runbook).
 resource "azurerm_key_vault_secret" "db_password" {
   name         = "db-password"
   key_vault_id = azurerm_key_vault.main.id
@@ -78,7 +78,7 @@ resource "azurerm_key_vault_secret" "db_password" {
 }
 
 # Shared secret between the edge (Cloudflare Worker) and the gateway. The gateway reads it from Key Vault;
-# the integrator copies it into the Worker. Never an output.
+# it is copied by hand into the Worker. Never an output.
 resource "random_password" "edge_key" {
   length  = 48
   special = false

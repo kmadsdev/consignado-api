@@ -14,7 +14,7 @@ Leia em português: [README.pt-br.md](README.pt-br.md)
 
 The same jar runs as pods on AKS and inside an Azure Function, behind a Java gateway and a Cloudflare edge, at <https://consignado.kmads.dev>.
 The AKS cluster is stopped by default; a signed-in user starts it for a 15-minute access window.
-Live since 2026-11-17. Measured through the edge: serverless host 18.6 to 18.9 s cold and 0.25 to 0.9 s warm; Kubernetes host about 0.76 s warm. The start of a stopped cluster was not verified at the time of writing.
+Live since 2026-11-17. Measured through the edge: serverless host 18.6 to 18.9 s cold and 0.25 to 0.9 s warm; Kubernetes host about 0.76 s warm. Cold start of a stopped cluster, measured on 2026-11-17: 7 min 13 s to the first answer (control plane 4 min 26 s, node 2 min 13 s, Spring Boot and database 26 s, load balancer 8 s); a window on a running cluster is ready in under 2 s.
 
 - Start here: [docs/platform/README.md](docs/platform/README.md) (what is live, what is not verified)
 - [Architecture diagrams](docs/platform/architecture.md) · [Decisions](docs/platform/decisions.md) · [Runbook](docs/platform/operations.md)
@@ -333,4 +333,4 @@ Test CPFs are generated at runtime with valid check digits; there is no real CPF
 
 ## License
 
-To be decided by the owner.
+I have not chosen a license yet.

@@ -83,7 +83,7 @@ The loan data (customers, agreements, contracts) is synthetic. The personal data
 | Data | Where | Why | Legal basis in the notice | How long |
 |---|---|---|---|---|
 | Email, name, company, LinkedIn URL, consent time | Table `users` in `stconsigappkm01` (Azure, `belgiumcentral`) | To make the account and to know who uses the demonstration | Consent | Until the person asks for deletion, or 12 months without use (the notice says so; no job enforces it yet) |
-| Guest user object (email, display name) | The owner's Entra ID tenant | Sign-in | Consent | Until deleted by the owner |
+| Guest user object (email, display name) | My own Entra ID tenant | Sign-in | Consent | Until deleted by the admin |
 | Hash of the IP address, hash of the device fingerprint, flags | Table `users` | Abuse prevention: one person, one trial | Legitimate interest | With the account |
 | Access windows: requested, ready, ended, events | Table `sessions` | To apply the window limit and to control cost | Not stated in the notice | Not stated in the sources |
 | Contact messages with name and email | Table `contacts` | To answer the person | Consent on the form | Not stated in the sources |
@@ -93,7 +93,7 @@ The loan data (customers, agreements, contracts) is synthetic. The personal data
 
 - **Guests.** What a guest types stays in the browser. No account is made and nothing goes to the database.
 - **Processors.** Microsoft Azure (hosting, database, sign-in, logs, email) and Cloudflare (DNS, the edge in front of all traffic, the bot check). The Azure resources are in `belgiumcentral`, with the database in `northcentralus` and email data in Europe. All are outside Brazil.
-- **Rights.** A person uses the contact form on the site, from the email address of the account. The owner answers by email. The removal steps are in the [runbook](operations.md).
+- **Rights.** A person uses the contact form on the site, from the email address of the account. The admin answers by email. The removal steps are in the [runbook](operations.md).
 - **Notice.** The privacy notice and the terms are pages of the site (`/privacy`, `/terms`).
 
 ## Known gaps
@@ -101,7 +101,7 @@ The loan data (customers, agreements, contracts) is synthetic. The personal data
 These are stated on purpose. None is hidden by the design.
 
 1. **No managed WAF rule set.** The edge is on the Cloudflare free plan. Front Door, with its WAF, was refused by the subscription. The gateway's own input rules are the main filter.
-2. **The database has a public endpoint.** The firewall rule admits every address of Azure, in any tenant. The password and TLS are the real controls. This was the owner's choice for cost.
+2. **The database has a public endpoint.** The firewall rule admits every address of Azure, in any tenant. The password and TLS are the real controls. I chose this for cost: a private endpoint costs about US$8 per month more.
 3. **Guests are in the same tenant as the subscription.** A separate External ID tenant was refused. Guest permissions are at the most restricted level, but the separation is weaker than a tenant of their own.
 4. **The privacy notice was not reviewed by a lawyer.** It names Cloudflare as the edge for all traffic.
 5. **Audit rows are not deleted after 90 days.** The notice promises 90 days. The gateway deletes no row. A storage rule or a job must be added. The same is true for the "12 months without use" rule of accounts.
@@ -111,7 +111,7 @@ These are stated on purpose. None is hidden by the design.
 9. **The bot check fails open** when its secret is not configured.
 10. **No scheduled rebuild and no vulnerability scan** of the serverless package, which carries its own Java runtime.
 11. **The Microsoft sign-up pages show the tenant, not the product.** The permission page and the code mail carry the tenant's display name and domain. These are tenant settings.
-12. **Some live behaviour was not verified** when this page was written: the cold start from a stopped cluster, the admin pages with a real token, the owner email, the duplicate-account hold with two real accounts, the budget pause from a real alert. The list is in the status table of the [entry page](README.md).
+12. **Some live behaviour was not verified** when this page was written: the cold start from a stopped cluster, the admin pages with a real token, the admin email, the duplicate-account hold with two real accounts, the budget pause from a real alert. The list is in the status table of the [entry page](README.md).
 
 ## Example
 

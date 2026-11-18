@@ -5,7 +5,7 @@ This directory creates the Azure resources of the platform (contract section 2) 
 
 > **Front Door is not created.** The subscription refuses it: `BadRequest: Free Trial and Student account is forbidden for
 > Azure Frontdoor resources.` The code is in `modules/edge` behind `enable_front_door` (default `false`). The edge is a
-> Cloudflare Worker (owner's decision, 2026-11-17); see "Decisions".
+> Cloudflare Worker (my decision, 2026-11-17); see "Decisions".
 
 - Terraform >= 1.9 (made with 1.16), providers `azurerm` 4.x, `azuread` 3.x, `random` 3.x (versions pinned in `.terraform.lock.hcl`).
 - Sign in first: `az login` as the Owner of the subscription. The same user must be able to create app registrations in the tenant.
@@ -27,7 +27,9 @@ cd infra/terraform
 #    role "Storage Blob Data Contributor" for the signed-in user.
 ./bootstrap.sh
 
-# 2. Each change. ALWAYS set the budget webhook first, in the same shell (it is in no file; see the note below).
+# 2. Each change. ALWAYS set the admin email and the budget webhook first, in the same shell (they are in no file;
+#    see the notes below). On the first apply, set TF_VAR_owner_email to the address by hand instead.
+export TF_VAR_owner_email="$(az functionapp config appsettings list -g rg-consignado -n func-consignado-gw-km01 --query "[?name=='OWNER_EMAIL'].value | [0]" -o tsv)"
 export TF_VAR_budget_webhook_url="https://consignado.kmads.dev/api/hooks/budget?code=$(az functionapp function keys list -g rg-consignado -n func-consignado-gw-km01 --function-name budgetHook --query default -o tsv)"
 terraform init -input=false
 terraform fmt -check && terraform validate
@@ -54,6 +56,9 @@ Notes for operation:
   gateway through the edge (`https://consignado.kmads.dev/api/hooks/budget?code=<function key>`). The URL holds a function key,
   so it is in no file: set it with the `export` line in step 2, in the same shell, and never print it. Without it, the variable
   is empty and the apply REMOVES the webhook from the action group (then the budget sends email only).
+- **Admin email: `TF_VAR_owner_email` on EVERY plan and apply.** `owner_email` has no default (the repository is public),
+  so a plan without it stops and asks for it. The value goes to the budget alerts, the action group and the gateway
+  setting `OWNER_EMAIL`; the `export` line in step 2 reads it back from that setting without printing it.
 - **Live window first.** An apply that changes a function app restarts it. Apply only when
   `curl -s https://consignado.kmads.dev/api/engine` shows `"activeSessions":0`.
 - **After an apply that changes a function app: remove `AzureWebJobsStorage` again.** The azurerm provider writes
@@ -74,7 +79,7 @@ Notes for operation:
      `az functionapp keys list -g rg-consignado -n func-consignado-api-km01 --query functionKeys.default -o tsv | az keyvault secret set --vault-name kv-consig-km01 -n apifn-host-key --file /dev/stdin --encoding utf-8 -o none`
   3. prove it: `POST https://consignado.kmads.dev/api/fn/api/v1/simulations/preview` answers 200 with an `installment`.
 - **Budget currency.** Azure keeps the amount of a budget in the billing currency of the subscription, and "Azure for
-  Students" here is billed in BRL. `budget_amount` (default 330 = the owner's US$60 at about R$ 5.50 per US dollar,
+  Students" here is billed in BRL. `budget_amount` (default 330 = the US$60 I chose, at about R$ 5.50 per US dollar,
   2026-11-18) is therefore in BRL; the same number goes to the gateway as `BUDGET_LIMIT` with `BUDGET_CURRENCY = BRL`
   (and, for one release, the old name `BUDGET_LIMIT_USD`). Until 2026-11-18 the amount was 60, so the real limit was R$ 60.
 - **Feature flags.** `enable_front_door` (default `false`), `enable_email`, `enable_budget`, `enable_function_vnet_integration` switch a part that the subscription refuses.
@@ -106,7 +111,7 @@ Notes for operation:
 | Virtual network | `vnet-consignado` | belgiumcentral | Subnets `snet-aks` and `snet-func` (delegation `Microsoft.App/environments`, service endpoint `Microsoft.Web`). Address ranges: `network.tf`. |
 | AKS | `aks-consignado` | belgiumcentral | Free tier, 1 x `Standard_D2as_v4`, Azure CNI overlay (pod and service ranges in `aks.tf`), OIDC issuer, workload identity, Key Vault CSI add-on, Entra ID + Azure RBAC, local accounts off, managed OS disk 32 GB. |
 | Registry | `crconsignadokm01` | belgiumcentral | Basic, admin user off. |
-| Key Vault | `kv-consig-km01` | belgiumcentral | RBAC mode, soft delete 7 days, purge protection on (since 2026-11-17; it cannot be turned off). Secrets `db-password` and `edge-key` (Terraform). `apifn-host-key`, `turnstile-secret`: the integrator. |
+| Key Vault | `kv-consig-km01` | belgiumcentral | RBAC mode, soft delete 7 days, purge protection on (since 2026-11-17; it cannot be turned off). Secrets `db-password` and `edge-key` (Terraform). `apifn-host-key`, `turnstile-secret`: set by hand after the first apply (operations runbook). |
 | PostgreSQL | `psql-consignado-km01` | northcentralus (`pg_location`) | Flexible server `B_Standard_B1ms`, v16, 32 GB, database `consignado`, admin `pgadmin`, public endpoint + rule `AllowAllAzureServices`. |
 | Storage (site) | `stconsigwebkm01` | belgiumcentral | Static website (`index.html`, error document `index.html`), no account key. |
 | Storage (app) | `stconsigappkm01` | belgiumcentral | Gateway only: host storage, containers `deploy-gateway`, `data`; tables `users`, `sessions`, `engine`, `contacts`, `audit` (ARM deployment `consignado-tables`); no account key. Container `deploy-api` is the OLD API host package (not used since 2026-11-17; delete it after the new one is proved). |
@@ -120,7 +125,7 @@ Notes for operation:
 | Identities | `id-consignado-app`, `-gw`, `-apifn`, `-github` | belgiumcentral | User-assigned. Federated credentials: pods, and the `main` branch of the three GitHub repositories. |
 | Custom role | `Consignado Engine Operator` | scope `rg-consignado` | read / start / stop / agentPools read / listClusterUserCredential. No write, no delete. |
 | Entra apps | `consignado-spa`, `consignado-api-gateway` | tenant | No client secrets. Scope `api://<client id>/access_as_user`, token v2, SPA pre-authorized. |
-| Budget | `budget-consignado`, action group `ag-consignado-budget` | subscription | R$ 330 per month (about US$60); Azure bills this subscription in BRL (`budget_amount` = 330, in the billing currency: the owner's US$60 at about R$ 5.50 per US dollar, 2026-11-18); 50, 80, 100 percent to the owner; 100 percent also calls the action group. |
+| Budget | `budget-consignado`, action group `ag-consignado-budget` | subscription | R$ 330 per month (about US$60); Azure bills this subscription in BRL (`budget_amount` = 330, in the billing currency: the US$60 I chose, at about R$ 5.50 per US dollar, 2026-11-18); 50, 80, 100 percent to me by email; 100 percent also calls the action group. |
 
 ### Role assignments
 
@@ -179,12 +184,12 @@ With Front Door Standard (+35.00) the fixed cost would be about 66 to 70 (about 
 ## Decisions and trade-offs
 
 - **Edge: Cloudflare Worker, not Front Door (2026-11-17).** The offer "Azure for Students" refuses Front Door
-  (`Free Trial and Student account is forbidden for Azure Frontdoor resources`). The owner chose Cloudflare: the DNS zone
+  (`Free Trial and Student account is forbidden for Azure Frontdoor resources`). I chose Cloudflare: the DNS zone
   `kmads.dev` is there already, the Worker costs nothing, and it gives TLS for the custom domains, a cache for the site and
   rate limits. What replaces the Front Door controls: (1) the gateway function app accepts only the Cloudflare IPv4 ranges
   (`gateway_allowed_cidrs`, 15 rules, default action Deny); (2) those ranges are shared by all Cloudflare customers, so the
   gateway also checks a shared header: the value is the Key Vault secret `edge-key` (48 random characters, made here; the
-  integrator copies it into the Worker as a secret); (3) app setting `EDGE=cloudflare` tells the gateway which edge it has.
+  value is copied by hand into the Worker as a secret); (3) app setting `EDGE=cloudflare` tells the gateway which edge it has.
   Trade-off: no Azure WAF, the IP list must be kept current by hand, and the SPA rewrite and the security headers move from
   the rule engine into the Worker. The static site stays in `stconsigwebkm01` (output `edge.static_site_host`).
 - **Front Door Standard (the first design, kept in `modules/edge`).** It gives one public entry for the site and the API, a CDN, managed certificates for the custom
@@ -195,7 +200,7 @@ With Front Door Standard (+35.00) the fixed cost would be about 66 to 70 (about 
 - **Internal load balancer.** The AKS service has no public IP. Kubernetes creates an internal load balancer with a fixed
   private address in `snet-aks` (set in `deploy/k8s` and in the gateway setting `AKS_INTERNAL_URL`); only the VNet can reach it, and the gateway is in the VNet (`snet-func`). The cluster identity has
   `Network Contributor` on `snet-aks` for this. Terraform does not create the load balancer: the Service manifest in `deploy/k8s` does.
-- **Database with a public endpoint and the Azure-services rule.** Owner's decision for cost. A private endpoint costs about
+- **Database with a public endpoint and the Azure-services rule.** I chose it for cost. A private endpoint costs about
   US$7 per month plus a private DNS zone, and VNet injection of the server makes the API host function app need VNet integration
   and a cross-region link (the server is in `northcentralus`). Protection that stays: TLS is required, the password has 28
   random characters and is only in Key Vault, and the firewall rule `AllowAllAzureServices` admits only addresses of Azure, not the internet.
@@ -204,13 +209,13 @@ With Front Door Standard (+35.00) the fixed cost would be about 66 to 70 (about 
   gateway and CI. No kubeconfig with a client certificate exists (`local_account_disabled = true`), so nothing can leak
   from a file. Each caller gets a token from Entra ID: the gateway reads (`RBAC Reader`; it cannot list nodes, so it reads pods),
   CI deploys (`RBAC Admin` on the namespace `consignado` only: `RBAC Writer` cannot change a `SecretProviderClass`),
-  the owner is `RBAC Cluster Admin` and creates the namespace once (`WITH_NAMESPACE=1 ./deploy/render.sh | kubectl apply -f -`).
+  my own account is `RBAC Cluster Admin` and creates the namespace once (`WITH_NAMESPACE=1 ./deploy/render.sh | kubectl apply -f -`).
   `kubectl` needs `kubelogin`.
 - **OS disk of the node: managed, 32 GB.** An ephemeral OS disk (48 GB in the 50 GiB cache of `Standard_D2as_v4`) has no
   disk cost. The Microsoft documentation for cluster stop/start (`learn.microsoft.com/azure/aks/start-stop-cluster`, read
   2026-11-17) does not list ephemeral OS disks as a limit, but it also does not say that they are supported; only the
-  "scale-down mode: deallocate" page says "Ephemeral OS disks aren't supported". Not confirmed -> managed disk, as the owner
-  said. Cost: US$5.81 per month. To change later: set `os_disk_type = "Ephemeral"`, `os_disk_size_gb = 48` (the node pool is replaced).
+  "scale-down mode: deallocate" page says "Ephemeral OS disks aren't supported". Not confirmed -> managed disk, as I
+  decided. Cost: US$5.81 per month. To change later: set `os_disk_type = "Ephemeral"`, `os_disk_size_gb = 48` (the node pool is replaced).
 - **Password in state.** `random_password` keeps the database password in the Terraform state. The state storage has no
   public access, no shared key and Entra ID auth only.
 - **Key Vault reference of `DB_PASSWORD`.** The provider resource `azurerm_function_app_flex_consumption` has no

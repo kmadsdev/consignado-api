@@ -18,13 +18,13 @@ What the visitor should take away: the same API runs on a serverless host and on
 |---|---|---|
 | **Guest** | The site, the live diagram, a loan preview on the serverless host, a masked snapshot of the shared data. What the guest types stays in the browser. | A visitor with no account can see a real request run, with no access to the database and at almost no cost. |
 | **Signed-in user** | The full API on the serverless host at all times, and the Kubernetes host inside access windows. | The Kubernetes host costs money per minute. An account gives a person to count the windows against, and a way to contact them. |
-| **Admin** | The owner: all of it, with no window limit, plus the admin pages (users, sessions, engine, budget, contact requests). | Someone must approve held accounts, grant windows and stop the engine. |
+| **Admin** | My own account: all of it, with no window limit, plus the admin pages (users, sessions, engine, budget, contact requests). | Someone must approve held accounts, grant windows and stop the engine. |
 
 Sign-up is self-service with an email one-time code. No password, no social login, no approval step for a normal account.
 
 ## Three windows of 15 minutes
 
-The owner chose 3 windows of 15 minutes per account. The sources record the choice and not a written reason. The facts around it:
+I chose 3 windows of 15 minutes per account. The facts around it:
 
 - **One window** costs about US$0.04 of node time, the start and the stop included (US$0.026 for the 15 minutes alone). The countdown starts when the cluster is ready, not when the user asks.
 - **3 windows** per account; more on request. A window is counted only when it opens; a failed start costs the user nothing.
@@ -33,19 +33,19 @@ The owner chose 3 windows of 15 minutes per account. The sources record the choi
 
 ## The request form for more
 
-A user with no windows left sees a form: "Request more windows". The same form on the home page takes general questions. The owner reads each message and can grant 1 to 10 more windows at a time to an account (the limit of the admin form).
+A user with no windows left sees a form: "Request more windows". The same form on the home page takes general questions. The admin reads each message and can grant 1 to 10 more windows at a time to an account (the limit of the admin form).
 
-A grant is a decision of the owner. Nothing refills the windows automatically.
+A grant is a decision of the admin. Nothing refills the windows automatically.
 
 ## Duplicate accounts
 
-The rule is one person, one trial. A second account on the same device is held until the owner approves it. A second account from the same IP address only gets a flag, because an office or a university shares one address. The price is that a real person on a shared device can wait for an approval.
+The rule is one person, one trial. A second account on the same device is held until the admin approves it. A second account from the same IP address only gets a flag, because an office or a university shares one address. The price is that a real person on a shared device can wait for an approval.
 
 ## The budget
 
-- **R$ 330 per month (about US$60)**, on an "Azure for Students" subscription that is paid from a student credit. Azure bills this subscription in BRL, so the budget amount is in BRL: the owner chose US$60, converted at about R$ 5.50 per US dollar on 2026-11-18.
+- **R$ 330 per month (about US$60)**, on an "Azure for Students" subscription that is paid from a student credit. Azure bills this subscription in BRL, so the budget amount is in BRL: I chose US$60, converted at about R$ 5.50 per US dollar on 2026-11-18.
 - With the cluster stopped, the fixed cost is about US$31 to 35 (about R$ 170 to 195) per month (retail prices of 2026-11-17; some lines are estimates). The rest is room for windows and deploys.
-- At 50 and 80 percent the owner gets an email. At 100 percent the engine is paused and no new window starts. The terms of the site say "until the next month"; the resume itself is a manual action of the owner in `/admin`.
+- At 50 and 80 percent I get an email. At 100 percent the engine is paused and no new window starts. The terms of the site say "until the next month"; the resume itself is a manual action of the admin in `/admin`.
 - The pause touches only the Kubernetes host. The site, the diagram and the serverless host continue.
 - The budget is an alert with an automatic action. It is not a hard spending cap.
 
@@ -53,9 +53,9 @@ The rule is one person, one trial. A second account on the same device is held u
 
 The real Kubernetes flow pauses. The site and the serverless flow stay.
 
-In practice: the owner pauses the engine, so no window can start. The cluster stays stopped. Visitors still get the site, the live diagram of serverless requests, the guest preview, and the simulated replay of a cluster start, which the site marks "Simulation, not a real cluster".
+In practice: the admin pauses the engine, so no window can start. The cluster stays stopped. Visitors still get the site, the live diagram of serverless requests, the guest preview, and the simulated replay of a cluster start, which the site marks "Simulation, not a real cluster".
 
-The fixed costs of the stopped stack (database, registry, node disk, public IP) do not end with a pause. What happens to them after the credit ends is the owner's decision and is not settled in the sources of this page.
+The fixed costs of the stopped stack (database, registry, node disk, public IP) do not end with a pause. I have not decided yet what happens to them after the credit ends.
 
 ## What is deliberately not built
 
@@ -63,12 +63,12 @@ The fixed costs of the stopped stack (database, registry, node disk, public IP) 
 |---|---|
 | A cluster that runs all the time | About US$76 per month for the node alone, over the whole budget. |
 | Azure Front Door and a managed WAF | Refused on this subscription type, and US$35 per month. |
-| A private endpoint for the database | About US$8 per month plus a private DNS zone (estimate). The owner chose the cheaper path and wrote the risk down. |
+| A private endpoint for the database | About US$8 per month plus a private DNS zone (estimate). I chose the cheaper path and wrote the risk down. |
 | A separate identity tenant for visitors | Refused by the region policy of the subscription. |
 | Passwords or social login | The sign-up flow uses an email one-time code only. |
 | A login inside the API | The gateway owns identity. The API trusts the network. |
 | Per-user data | All users share one synthetic data set. Nothing can be deleted through the API. |
-| Automatic refill of windows | More windows are given by the owner, on request. |
+| Automatic refill of windows | More windows are given by the admin, on request. |
 | A hard spending cap | Azure budgets alert; they do not stop spend. The engine pause is the nearest safe action. |
 | Deletion of old audit rows and unused accounts | Promised in the privacy notice, not yet automated. A known gap. |
 | An always-ready serverless instance | The function apps run on demand only, so their cost stays inside the free grant or near it (estimate). The cold start is shown as it is. |

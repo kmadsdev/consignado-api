@@ -82,7 +82,7 @@ locals {
 
   role_assignments = merge(
     {
-      # Signed-in user (owner / integrator)
+      # Signed-in user (the admin who runs Terraform)
       "user-aks-cluster-admin" = { scope = local.aks_id, role = "Azure Kubernetes Service RBAC Cluster Admin", principal = local.admin_oid, type = "User" }
 
       # AKS itself

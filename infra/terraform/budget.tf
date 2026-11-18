@@ -12,7 +12,7 @@ resource "azurerm_monitor_action_group" "budget" {
     use_common_alert_schema = true
   }
 
-  # The integrator sets var.budget_webhook_url when the gateway route exists.
+  # var.budget_webhook_url holds a function key: set it with TF_VAR_budget_webhook_url (README, step 2).
   dynamic "webhook_receiver" {
     for_each = var.budget_webhook_url == "" ? [] : [var.budget_webhook_url]
 
